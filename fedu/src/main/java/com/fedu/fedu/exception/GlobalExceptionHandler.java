@@ -2,6 +2,7 @@ package com.fedu.fedu.exception;
 
 import com.fedu.fedu.dto.res.ResponseData;
 import com.fedu.fedu.dto.res.ResponseError;
+import com.fedu.fedu.dto.res.ScheduleConflictResponse;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -17,6 +18,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.bind.MissingRequestHeaderException;
 
 import static org.springframework.http.MediaType.APPLICATION_JSON_VALUE;
 
@@ -24,10 +26,10 @@ import static org.springframework.http.MediaType.APPLICATION_JSON_VALUE;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
-    /** Validation lỗi (body, param, path variable) */
     @ExceptionHandler({
             MethodArgumentNotValidException.class,
             MissingServletRequestParameterException.class,
+            MissingRequestHeaderException.class,
             ConstraintViolationException.class
     })
     @ApiResponses(@ApiResponse(responseCode = "400", description = "Bad Request",
@@ -49,7 +51,7 @@ public class GlobalExceptionHandler {
                 .body(new ResponseError(HttpStatus.BAD_REQUEST.value(), message));
     }
 
-    /** Token sai/hết hạn, sai mật khẩu */
+    
     @ExceptionHandler({AuthenticationException.class, BadCredentialsException.class})
     @ApiResponses(@ApiResponse(responseCode = "401", description = "Unauthorized",
             content = @Content(mediaType = APPLICATION_JSON_VALUE, examples = @ExampleObject(
@@ -60,7 +62,7 @@ public class GlobalExceptionHandler {
                 .body(new ResponseError(HttpStatus.UNAUTHORIZED.value(), e.getMessage()));
     }
 
-    /** Đã login nhưng không đủ quyền */
+    
     @ExceptionHandler(AccessDeniedException.class)
     @ApiResponses(@ApiResponse(responseCode = "403", description = "Forbidden",
             content = @Content(mediaType = APPLICATION_JSON_VALUE, examples = @ExampleObject(
@@ -71,7 +73,7 @@ public class GlobalExceptionHandler {
                 .body(new ResponseError(HttpStatus.FORBIDDEN.value(), "Bạn không có quyền truy cập"));
     }
 
-    /** Resource không tồn tại */
+    
     @ExceptionHandler(ResourceNotFoundException.class)
     @ApiResponses(@ApiResponse(responseCode = "404", description = "Not Found",
             content = @Content(mediaType = APPLICATION_JSON_VALUE, examples = @ExampleObject(
@@ -82,7 +84,13 @@ public class GlobalExceptionHandler {
                 .body(new ResponseError(HttpStatus.NOT_FOUND.value(), e.getMessage()));
     }
 
-    /** Dữ liệu xung đột (email trùng, code trùng, ...) */
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<ResponseData<Void>> handleIllegalArgument(IllegalArgumentException e) {
+        log.warn("Illegal argument: {}", e.getMessage());
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(new ResponseError(HttpStatus.BAD_REQUEST.value(), e.getMessage()));
+    }
+
     @ExceptionHandler(InvalidDataException.class)
     @ApiResponses(@ApiResponse(responseCode = "409", description = "Conflict",
             content = @Content(mediaType = APPLICATION_JSON_VALUE, examples = @ExampleObject(
@@ -93,7 +101,25 @@ public class GlobalExceptionHandler {
                 .body(new ResponseError(HttpStatus.CONFLICT.value(), e.getMessage()));
     }
 
-    /** Fallback */
+    @ExceptionHandler(org.springframework.dao.DataIntegrityViolationException.class)
+    public ResponseEntity<ResponseData<Void>> handleDataIntegrityViolation(org.springframework.dao.DataIntegrityViolationException e) {
+        log.warn("Database integrity violation: {}", e.getMessage());
+        String msg = "Dữ liệu bị xung đột hoặc đã tồn tại.";
+        if (e.getMessage() != null && e.getMessage().contains("uniq_active_classroom_path")) {
+            msg = "Classroom đã có lộ trình. Xóa draft hoặc unpublish trước.";
+        }
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(new ResponseError(HttpStatus.CONFLICT.value(), msg));
+    }
+
+    @ExceptionHandler(ScheduleConflictException.class)
+    public ResponseEntity<ResponseData<ScheduleConflictResponse>> handleScheduleConflict(ScheduleConflictException e) {
+        log.warn("Schedule conflict: {}", e.getMessage());
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(new ResponseData<>(HttpStatus.CONFLICT.value(), "Trùng lịch ca học", e.getConflictResponse()));
+    }
+
+    
     @ExceptionHandler(Exception.class)
     @ApiResponses(@ApiResponse(responseCode = "500", description = "Internal Server Error",
             content = @Content(mediaType = APPLICATION_JSON_VALUE, examples = @ExampleObject(

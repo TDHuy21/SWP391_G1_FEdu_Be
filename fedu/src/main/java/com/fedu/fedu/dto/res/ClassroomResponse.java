@@ -1,5 +1,7 @@
 package com.fedu.fedu.dto.res;
 
+import com.fedu.fedu.utils.enums.ClassroomStatus;
+import com.fedu.fedu.utils.enums.Term;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -14,22 +16,21 @@ import java.time.LocalDateTime;
 public class ClassroomResponse {
     private Long classroomId;
     private String className;
-    private String semester;
+
+    /** "Kì học": id học kỳ đã liên kết (để FE prefill dropdown khi sửa). */
+    private Long semesterId;
+    /** term/academicYear/semesterLabel suy ra từ học kỳ đã liên kết — giữ để FE hiển thị. */
+    private String term;
+    private Integer academicYear;
+    /** Nhãn hiển thị dựng sẵn cho FE, ví dụ "Fall 2024" (null nếu chưa đặt). */
+    private String semesterLabel;
+
     private String description;
+    private ClassroomStatus status;
 
-    // Subject info
-    private Long subjectId;
-    private String subjectCode;
-    private String subjectName;
-
-    // Lecturer info
-    private Long lecturerId;
-    private String lecturerName;
-    private String lecturerEmail;
-
+    private int subjectCount;
     private int studentCount;
+
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
-    private String lecturerFirstName;
-    private String lecturerLastName;
 }

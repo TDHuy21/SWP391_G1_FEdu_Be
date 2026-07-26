@@ -1,9 +1,13 @@
 package com.fedu.fedu.entity;
 
-import com.fedu.fedu.utils.enums.TicketLevel;
-import com.fedu.fedu.utils.enums.TicketStatus;
+import com.fedu.fedu.utils.enums.SupportTicketStatus;
 import jakarta.persistence.*;
 import lombok.*;
+
+
+
+
+
 
 @Getter
 @Setter
@@ -19,32 +23,26 @@ public class SupportTicket extends AbstractEntity<Long> {
     @Column(name = "ticket_id")
     private Long ticketId;
 
+    
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "classroom_subject_id", nullable = false)
-    private ClassroomSubject classroomSubject;
+    @JoinColumn(name = "classroom_subject_student_id", nullable = false)
+    private ClassroomSubjectStudent classroomSubjectStudent;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "created_by", nullable = false)
-    private UserAccount createdBy;
+    
+    @Column(name = "message_student", nullable = false, columnDefinition = "TEXT")
+    private String messageStudent;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "assigned_to")
-    private UserAccount assignedTo;
+    
+    @Column(name = "message_response", columnDefinition = "TEXT")
+    private String messageResponse;
 
-    @Column(name = "title", nullable = false)
-    private String title;
-
-    @Column(name = "description", nullable = false, columnDefinition = "TEXT")
-    private String description;
-
+    
+    @Builder.Default
     @Enumerated(EnumType.STRING)
-    @Column(name = "ticket_status")
-    private TicketStatus status = TicketStatus.OPEN;
+    @Column(name = "status", nullable = false, length = 20)
+    private SupportTicketStatus status = SupportTicketStatus.NONE;
 
-    @Enumerated(EnumType.STRING)
-    @Column(name = "ticket_level")
-    private TicketLevel supportLevel = TicketLevel.SUB_MENTOR;
-
-    @Column(name = "is_deleted")
+    @Builder.Default
+    @Column(name = "is_deleted", nullable = false)
     private Boolean isDeleted = false;
 }

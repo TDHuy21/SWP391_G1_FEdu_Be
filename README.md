@@ -41,8 +41,8 @@
 
 ### 🗄️ Database
 
-- **Database Engine**: PostgreSQL (Deploy trên cloud Neon.tech)
-- **Quản lý Schema**: Khởi tạo thủ công thông qua tệp tin SQL script `fedudb_script.sql` (Hibernate `ddl-auto` cấu hình là `none`).
+- **Database Engine**: PostgreSQL (cloud Neon.tech cho team dev, hoặc PostgreSQL local cho demo)
+- **Quản lý Schema**: Flyway migrations trong `fedu/src/main/resources/db/migration/` — app tự dựng/cập nhật schema khi khởi động (Hibernate `ddl-auto` cấu hình là `none`).
 
 ---
 
@@ -52,8 +52,7 @@
 SWP391_G1_FEdu_Be/
 ├── fedu/                     # Thư mục chứa mã nguồn Backend (Spring Boot Project)
 │   ├── src/main/java/        # Mã nguồn Java (Controllers, Services, Repositories, DTOs, Entities...)
-│   ├── src/main/resources/   # Cấu hình ứng dụng (application.yml, static templates...)
-│   ├── fedudb_script.sql     # Script khởi tạo cơ sở dữ liệu PostgreSQL
+│   ├── src/main/resources/   # Cấu hình ứng dụng (application.yml, db/migration - Flyway...)
 │   ├── mvnw / mvnw.cmd       # Maven wrapper khởi chạy dự án
 │   └── pom.xml               # Khai báo dependencies của Maven
 ├── SWP391_G1_FEdu_Fe/        # Thư mục chứa mã nguồn Frontend (React + Vite Project)
@@ -70,8 +69,8 @@ SWP391_G1_FEdu_Be/
 ### 1. Chuẩn bị Cơ sở dữ liệu (Database)
 
 1. Cài đặt PostgreSQL (hoặc sử dụng dịch vụ đám mây như Neon, Supabase).
-2. Tạo cơ sở dữ liệu mới (ví dụ đặt tên là `fedu_db`).
-3. Chạy toàn bộ file script `/fedu/fedudb_script.sql` trong cơ sở dữ liệu vừa tạo để dựng schema và dữ liệu mẫu (Roles...).
+2. Tạo cơ sở dữ liệu trống mới (ví dụ đặt tên là `fedudb`).
+3. Không cần chạy script tay — **Flyway tự dựng schema + dữ liệu tham chiếu** (roles, học kỳ, slots) khi ứng dụng khởi động lần đầu. Chạy với profile `demo` sẽ nạp thêm bộ dữ liệu demo (tài khoản mẫu, môn học, lộ trình mẫu — xem `DEPLOYMENT.md`).
 
 ### 2. Cấu hình Biến môi trường (Environment Variables)
 
@@ -115,7 +114,27 @@ Di chuyển vào thư mục `SWP391_G1_FEdu_Fe/` và thực hiện các lệnh s
   ```
   Frontend sẽ được phục vụ tại địa chỉ: `http://localhost:5173`
 
+### 5. Khởi chạy bằng Docker Compose (Khuyên dùng)
+
+Nếu bạn muốn chạy cả Backend và Frontend cùng lúc bằng Docker, dự án đã cung cấp sẵn cấu hình Docker Compose.
+
+1. **Chuẩn bị file cấu hình:**
+   Sao chép file mẫu `.env.example` thành `.env` ở thư mục gốc:
+   ```bash
+   cp .env.example .env
+   ```
+2. **Cập nhật thông tin cấu hình:**
+   Mở file `.env` vừa tạo và điền các thông tin của bạn (đặc biệt là `DB_PASSWORD` và `MAIL_PASSWORD`). Các khóa bảo mật JWT đã được sinh sẵn mặc định để chạy thử nghiệm.
+3. **Khởi chạy Docker Compose:**
+   Tại thư mục gốc của dự án, chạy lệnh:
+   ```bash
+   docker compose up --build -d
+   ```
+   - **Backend** sẽ được chạy tại cổng `http://localhost:8080` (Swagger UI: `http://localhost:8080/swagger-ui/index.html`).
+   - **Frontend** sẽ được chạy tại cổng `http://localhost:80`.
+
 ---
+
 
 ## 📖 Tài liệu API (API Documentation)
 
@@ -159,4 +178,5 @@ Các lỗi được xử lý tập trung bởi `@RestControllerAdvice` trong `Gl
 ## 👥 Thành viên thực hiện (Group 1 - SWP391)
 
 - Sinh viên Đại học FPT.
-- Liên hệ hỗ trợ: `hieudtfptu@gmail.com`
+- Liên hệ hỗ trợ: `fedu.swp391@gmail.com`
+  test update

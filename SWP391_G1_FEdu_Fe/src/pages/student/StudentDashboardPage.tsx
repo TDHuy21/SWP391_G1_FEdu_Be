@@ -1,0 +1,684 @@
+import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
+import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '../../components/ui/card';
+import { Button } from '../../components/ui/button';
+import { Badge } from '../../components/ui/badge';
+import { 
+  BookOpen, 
+  Award, 
+  History, 
+  FileText, 
+  CheckCircle2, 
+  Circle, 
+  Lock, 
+  Play, 
+  ArrowRight, 
+  Loader2, 
+  GraduationCap, 
+  Calendar, 
+  TrendingUp, 
+  User, 
+  Mail, 
+  ChevronRight,
+  ChevronDown,
+  AlertTriangle
+} from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
+import { classroomService } from '../../services/classroom.service';
+import { studentService } from '../../services/student.service';
+import { MaterialPreview } from '../../components/learningPath/MaterialPreview';
+import type { ClassroomSubjectResponse } from '../../types/classroomSubject';
+import type { LearningNodeResponse, NodeContentResponse } from '../../services/learningPath.service';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '../../components/ui/dialog';
+
+const getOnClassStatus = (node: any) => {
+  if (!node.studyDate || !node.startTime || !node.endTime) {
+    return { text: "Chưa xếp lịch", color: "text-muted-foreground bg-muted border-border" };
+  }
+  try {
+    const now = new Date();
+    const startStr = `${node.studyDate}T${node.startTime.substring(0, 5)}:00`;
+    const endStr = `${node.studyDate}T${node.endTime.substring(0, 5)}:00`;
+    const startTimeObj = new Date(startStr);
+    const endTimeObj = new Date(endStr);
+    if (isNaN(startTimeObj.getTime()) || isNaN(endTimeObj.getTime())) {
+      return { text: "Lỗi lịch học", color: "text-muted-foreground bg-muted border-border" };
+    }
+    if (now < startTimeObj) {
+      return { text: "Chưa bắt đầu", color: "text-amber-600 dark:text-amber-400 bg-amber-500/10 border-amber-500/20" };
+    } else if (now >= startTimeObj && now <= endTimeObj) {
+      return { text: "Đang diễn ra", color: "text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border-emerald-500/20 animate-pulse" };
+    } else {
+      return { text: "Đã kết thúc", color: "text-muted-foreground bg-muted border-border" };
+    }
+  } catch (e) {
+    return { text: "Lỗi lịch học", color: "text-muted-foreground bg-muted border-border" };
+  }
+};
+
+export function StudentDashboardPage() {
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  
+  const [subjects, setSubjects] = useState<ClassroomSubjectResponse[]>([]);
+  const [subjectLevels, setSubjectLevels] = useState<Record<number, number | null>>({});
+  const [subjectPaths, setSubjectPaths] = useState<Record<number, string | null>>({});
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  
+  const [isRoadmapOpen, setIsRoadmapOpen] = useState(false);
+  const [selectedSubject, setSelectedSubject] = useState<ClassroomSubjectResponse | null>(null);
+  const [nodes, setNodes] = useState<LearningNodeResponse[]>([]);
+  const [loadingGraph, setLoadingGraph] = useState(false);
+  const [expandedNodeId, setExpandedNodeId] = useState<number | null>(null);
+  const [nodeContents, setNodeContents] = useState<Record<number, NodeContentResponse>>({});
+  const [loadingNodeContent, setLoadingNodeContent] = useState<Record<number, boolean>>({});
+
+  useEffect(() => {
+    const fetchDashboardData = async () => {
+      if (!user?.userId) {
+        setLoading(false);
+        return;
+      }
+
+      try {
+        setLoading(true);
+        setError(null);
+
+        
+        const enrolledSubjects = await classroomService.getClassroomSubjectsByStudent(user.userId);
+        setSubjects(enrolledSubjects || []);
+
+        
+        const levelsMap: Record<number, number | null> = {};
+        const pathsMap: Record<number, string | null> = {};
+
+        await Promise.all(
+          (enrolledSubjects || []).map(async (s) => {
+            try {
+              const history = await studentService.getLevelHistory(s.classroomSubjectId);
+              if (history && history.length > 0) {
+                
+                const latest = history[history.length - 1];
+                levelsMap[s.classroomSubjectId] = latest.newLevel;
+              } else {
+                levelsMap[s.classroomSubjectId] = null;
+              }
+            } catch {
+              levelsMap[s.classroomSubjectId] = null;
+            }
+
+            try {
+              
+              const graph = await studentService.getClassroomSubjectGraph(s.classroomSubjectId);
+              // Graph state là nguồn chuẩn: NEED_PLACEMENT nghĩa là currentLevel đã bị reset
+              // (vd. được duyệt thi lại bài phân loại) dù level history vẫn còn bản ghi cũ.
+              if (graph?.state === 'NEED_PLACEMENT' || graph?.state === 'PLACEMENT_PENDING') {
+                levelsMap[s.classroomSubjectId] = null;
+              }
+              if (graph && graph.state !== 'NEED_PLACEMENT' && graph.state !== 'NO_PATH') {
+                pathsMap[s.classroomSubjectId] = graph.state === 'PUBLISHED' ? 'Lộ trình chính thức' : 'Bản nháp';
+              } else {
+                pathsMap[s.classroomSubjectId] = null;
+              }
+            } catch {
+              pathsMap[s.classroomSubjectId] = null;
+            }
+          })
+        );
+
+        setSubjectLevels(levelsMap);
+        setSubjectPaths(pathsMap);
+      } catch (err: any) {
+        console.error('Error fetching student dashboard:', err);
+        setError(err.response?.data?.message || 'Không thể tải thông tin dashboard. Vui lòng thử lại sau.');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchDashboardData();
+  }, [user?.userId]);
+
+  const handleOpenRoadmap = async (cs: ClassroomSubjectResponse) => {
+    setSelectedSubject(cs);
+    setIsRoadmapOpen(true);
+    setLoadingGraph(true);
+    setExpandedNodeId(null);
+    setNodeContents({});
+    try {
+      const graph = await studentService.getClassroomSubjectGraph(cs.classroomSubjectId);
+      
+      const sortedNodes = (graph.nodes || []).sort((a, b) => {
+        const sA = a.stageOrder ?? 0;
+        const sB = b.stageOrder ?? 0;
+        if (sA !== sB) return sA - sB;
+        return ((a.displayOrder ?? 0) - (b.displayOrder ?? 0)) || (a.nodeId - b.nodeId);
+      });
+      setNodes(sortedNodes);
+    } catch (err: any) {
+      console.error("Failed to load roadmap graph:", err);
+      toast.error("Không thể tải lộ trình học tập");
+      setIsRoadmapOpen(false);
+    } finally {
+      setLoadingGraph(false);
+    }
+  };
+
+  const handleToggleNode = async (nodeId: number, studentStatus: string | undefined) => {
+    if (studentStatus === 'LOCKED') {
+      const node = nodes.find(n => n.nodeId === nodeId);
+      if (node && node.nodeType === 'ON_CLASS') {
+        const statusInfo = getOnClassStatus(node);
+        if (statusInfo.text === "Đã kết thúc") {
+          toast.error("Buổi học trên lớp này đã kết thúc!");
+          return;
+        }
+        if (node.status !== 'OPEN') {
+          toast.error("Buổi học trên lớp này chưa được giáo viên mở khóa!");
+          return;
+        }
+      }
+      toast.error("Bài học này đang bị khóa. Hãy hoàn thành các bài học trước!");
+      return;
+    }
+    
+    if (expandedNodeId === nodeId) {
+      setExpandedNodeId(null);
+      return;
+    }
+
+    setExpandedNodeId(nodeId);
+    if (nodeContents[nodeId]) return; 
+
+    setLoadingNodeContent(prev => ({ ...prev, [nodeId]: true }));
+    try {
+      const content = await studentService.getNodeContent(nodeId);
+      setNodeContents(prev => ({ ...prev, [nodeId]: content }));
+    } catch (err) {
+      console.error("Failed to load node content:", err);
+      toast.error("Không thể tải nội dung bài học");
+    } finally {
+      setLoadingNodeContent(prev => ({ ...prev, [nodeId]: false }));
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-3">
+        <Loader2 className="w-9 h-9 animate-spin text-primary" />
+        <span className="text-sm text-muted-foreground font-medium">Đang tải trang tổng quan của bạn...</span>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-3">
+        <AlertTriangle className="w-12 h-12 text-rose-500" />
+        <p className="text-foreground font-semibold">{error}</p>
+        <button
+          onClick={() => window.location.reload()}
+          className="px-5 py-2.5 bg-primary text-primary-foreground rounded-xl hover:bg-primary/90 transition-all text-sm font-bold shadow-sm"
+        >
+          Tải lại trang
+        </button>
+      </div>
+    );
+  }
+
+  
+  const totalCourses = subjects.length;
+  const placementDone = Object.values(subjectLevels).filter(lvl => lvl !== null).length;
+
+  return (
+    <div className="space-y-6 font-sans">
+      {}
+      <div className="rounded-xl bg-gradient-to-br from-indigo-950 via-slate-900 to-indigo-900 p-6 text-white border border-border/40 shadow-md relative overflow-hidden">
+        <div className="absolute right-0 bottom-0 top-0 opacity-10 flex items-center justify-center pr-12 hidden md:flex pointer-events-none select-none">
+          <GraduationCap className="size-48" />
+        </div>
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 relative z-10">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+            <div className="h-16 w-16 rounded-xl border border-white/20 overflow-hidden bg-white/10 flex items-center justify-center text-3xl shrink-0 font-extrabold shadow-inner">
+              {user?.avatarUrl ? (
+                <img src={user.avatarUrl} alt="Avatar" className="h-full w-full object-cover" />
+              ) : (
+                "🎓"
+              )}
+            </div>
+            <div>
+              <h1 className="text-xl md:text-2xl font-bold tracking-tight text-white flex items-center gap-2">
+                Chào mừng trở lại, {user?.lastName || 'Sinh viên'} {user?.firstName || ''}!
+              </h1>
+              <p className="text-indigo-200/80 text-sm mt-1 font-normal">
+                Hôm nay là {new Date().toLocaleDateString('vi-VN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}. Chúc bạn học tập tốt!
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {}
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
+        <Card className="bg-card border border-border/60 rounded-xl shadow-xs hover:shadow-md hover:border-border/80 transition-all duration-300 flex flex-col justify-between p-5">
+          <div className="flex justify-between items-center">
+            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Môn học đăng ký</span>
+            <div className="p-2.5 bg-muted/65 text-primary rounded-lg border border-border/40">
+              <BookOpen className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="mt-4">
+            <div className="text-2xl font-bold text-foreground tracking-tight">{totalCourses}</div>
+            <p className="text-[11px] text-muted-foreground mt-1">Các lớp môn học phân phối lộ trình cá nhân hóa.</p>
+          </div>
+        </Card>
+
+        <Card className="bg-card border border-border/60 rounded-xl shadow-xs hover:shadow-md hover:border-border/80 transition-all duration-300 flex flex-col justify-between p-5">
+          <div className="flex justify-between items-center">
+            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Đã kiểm tra đầu vào</span>
+            <div className="p-2.5 bg-muted/65 text-primary rounded-lg border border-border/40">
+              <Award className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="mt-4">
+            <div className="text-2xl font-bold text-foreground tracking-tight">{placementDone} / {totalCourses}</div>
+            <p className="text-[11px] text-muted-foreground mt-1">Số môn học đã hoàn tất phân loại học lực đầu vào.</p>
+          </div>
+        </Card>
+
+        <Card className="bg-card border border-border/60 rounded-xl shadow-xs hover:shadow-md hover:border-border/80 transition-all duration-300 flex flex-col justify-between p-5">
+          <div className="flex justify-between items-center">
+            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Học kỳ hiện tại</span>
+            <div className="p-2.5 bg-muted/65 text-primary rounded-lg border border-border/40">
+              <Calendar className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="mt-4">
+            <div className="text-2xl font-bold text-foreground tracking-tight">
+              {subjects[0]?.className?.substring(0, 4) || '2026'}
+            </div>
+            <p className="text-[11px] text-muted-foreground mt-1">Đang trong thời gian học tập chính thức.</p>
+          </div>
+        </Card>
+      </div>
+
+      {}
+      <div className="space-y-4">
+        <h2 className="text-lg font-bold text-foreground flex items-center gap-2">
+          <GraduationCap className="size-5 text-primary" /> Danh sách môn học của tôi
+        </h2>
+
+        {subjects.length === 0 ? (
+          <div className="text-center py-16 bg-card rounded-xl border border-dashed border-border/60">
+            <BookOpen className="size-12 text-muted-foreground/60 mx-auto mb-3" />
+            <p className="text-muted-foreground text-sm font-medium">Bạn chưa tham gia lớp học môn học nào.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {subjects.map((c) => {
+              const currentLevel = subjectLevels[c.classroomSubjectId];
+              const pathAssigned = subjectPaths[c.classroomSubjectId];
+              
+              const getLvlLabel = (lvl: number | null | undefined) => {
+                if (lvl === 1) return 'Yếu';
+                if (lvl === 2) return 'Trung bình';
+                if (lvl === 3) return 'Khá';
+                return 'Chưa làm bài test';
+              };
+
+              const getLvlColor = (lvl: number | null | undefined) => {
+                if (lvl === 1) return 'bg-rose-50 border-rose-200 text-rose-700 dark:bg-rose-950/20 dark:text-rose-450';
+                if (lvl === 2) return 'bg-amber-50 border-amber-200 text-amber-700 dark:bg-amber-950/20 dark:text-amber-450';
+                if (lvl === 3) return 'bg-emerald-50 border-emerald-200 text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-450';
+                return 'bg-muted/80 border-border/50 text-muted-foreground';
+              };
+
+              return (
+                <Card key={c.classroomSubjectId} className="bg-card border border-border/60 shadow-xs rounded-xl hover:shadow-md hover:-translate-y-1 hover:border-border/80 transition-all duration-300 flex flex-col justify-between overflow-hidden group">
+                  <div className="p-5 space-y-4">
+                    {}
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-muted-foreground/75 tracking-wider">Lớp: {c.className}</span>
+                      <h3 className="font-bold text-foreground text-base leading-snug mt-1 group-hover:text-primary transition-colors truncate" title={c.subjectName}>
+                        {c.subjectName}
+                      </h3>
+                      <p className="text-xs text-muted-foreground mt-1.5 font-medium flex items-center gap-1">
+                        <span className="font-bold text-muted-foreground/60">Mã môn:</span> {c.subjectCode}
+                      </p>
+                    </div>
+
+                    {}
+                    <div className="border-t border-border/50" />
+
+                    {}
+                    <div className="space-y-2.5 text-xs text-muted-foreground/95">
+                      <div className="flex justify-between items-center">
+                        <span className="font-medium text-muted-foreground/75">Giảng viên:</span>
+                        <span className="font-semibold text-foreground">{c.lecturerName || 'Chưa phân công'}</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="font-medium text-muted-foreground/75">Trạng thái xếp lớp:</span>
+                        <Badge variant="outline" className={`text-[10px] font-bold border rounded-[6px] px-2 py-0.5 ${getLvlColor(currentLevel)}`}>
+                          {getLvlLabel(currentLevel)}
+                        </Badge>
+                      </div>
+                    </div>
+                  </div>
+
+                  {}
+                  <CardFooter className="bg-muted/15 p-4 border-t border-border/40 flex flex-col gap-3">
+                    {currentLevel === null ? (
+                      <div className="w-full space-y-2">
+                        <div className="p-2.5 bg-amber-500/10 border border-amber-500/20 rounded-xl text-center">
+                          <p className="text-[10.5px] leading-relaxed text-amber-600 dark:text-amber-400 font-medium">
+                            Bạn cần hoàn thành bài kiểm tra phân loại đầu vào để mở khóa lộ trình học.
+                          </p>
+                        </div>
+                        <Button
+                          onClick={() => navigate(`/student/classroom-subjects/${c.classroomSubjectId}/placement`)}
+                          className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-bold py-2.5 px-3 rounded-lg text-xs flex items-center justify-center gap-1.5 shadow-sm transition-all active:scale-[0.98] cursor-pointer"
+                        >
+                          <Play className="size-3.5 fill-current" /> Làm bài test đầu vào
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="w-full flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          onClick={() => navigate(`/student/classroom-subjects/${c.classroomSubjectId}/level-history`)}
+                          className="flex-1 bg-card text-foreground border border-border/80 hover:bg-accent font-semibold rounded-lg text-xs py-2 px-3 h-9 flex items-center justify-center transition-all cursor-pointer"
+                          title="Lịch sử thay đổi mức"
+                        >
+                          <History className="size-3.5 mr-1" /> Lịch sử
+                        </Button>
+                        <Button
+                          onClick={() => handleOpenRoadmap(c)}
+                          className="flex-1 bg-primary hover:bg-primary/90 text-primary-foreground font-bold rounded-lg text-xs py-2 px-3 h-9 flex items-center justify-center gap-1 shadow-sm transition-all active:scale-[0.98] cursor-pointer"
+                        >
+                          <TrendingUp className="size-3.5" /> Lộ trình học
+                        </Button>
+                      </div>
+                    )}
+                  </CardFooter>
+                </Card>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {}
+      <Dialog open={isRoadmapOpen} onOpenChange={setIsRoadmapOpen}>
+        <DialogContent className="sm:max-w-2xl max-h-[85vh] flex flex-col p-0 overflow-hidden bg-card text-foreground">
+          <DialogHeader className="p-6 pb-4 border-b border-border shrink-0 bg-card">
+            <DialogTitle className="flex items-center gap-2 text-base font-bold text-foreground">
+              <TrendingUp className="size-5 text-primary" /> Lộ trình học tập cá nhân hóa
+            </DialogTitle>
+            <DialogDescription className="text-muted-foreground">
+              Lớp môn: <span className="font-semibold text-foreground">{selectedSubject?.displayName || selectedSubject?.subjectName}</span>
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex-1 overflow-y-auto p-6 space-y-6">
+            {loadingGraph ? (
+              <div className="flex flex-col items-center justify-center py-20 gap-2">
+                <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                <span className="text-xs text-muted-foreground font-medium">Đang tải sơ đồ lộ trình học...</span>
+              </div>
+            ) : nodes.length === 0 ? (
+              <div className="text-center py-16 text-muted-foreground border border-dashed border-border rounded-2xl bg-muted/10">
+                <BookOpen className="w-10 h-10 text-muted-foreground mx-auto mb-2" />
+                <p className="text-xs font-semibold">Chưa có bài học nào được cấu hình trong lộ trình này.</p>
+              </div>
+            ) : (
+              <div className="relative pl-6 border-l border-border space-y-8 py-2">
+                {nodes.map((node, index) => {
+                  const isCompleted = node.studentStatus === 'COMPLETED';
+                  const isOpen = node.studentStatus === 'OPEN' || node.studentStatus === 'IN_PROGRESS';
+                  const isLocked = !node.studentStatus || node.studentStatus === 'LOCKED';
+                  
+                  const isExpanded = expandedNodeId === node.nodeId;
+
+                  return (
+                    <div key={node.nodeId} className="relative">
+                      {}
+                      <span className={`absolute -left-[35px] top-1.5 flex h-6 w-6 items-center justify-center rounded-full border ring-4 ring-background shrink-0 z-10 transition-colors ${
+                        isCompleted 
+                          ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400'
+                          : isOpen 
+                            ? 'bg-blue-500/10 border-blue-500/20 text-blue-600 dark:text-blue-400 animate-pulse'
+                            : 'bg-muted border-border text-muted-foreground'
+                      }`}>
+                        {isCompleted ? (
+                          <CheckCircle2 className="size-3.5" />
+                        ) : isLocked ? (
+                          <Lock className="size-3" />
+                        ) : (
+                          <Circle className="size-2 fill-current" />
+                        )}
+                      </span>
+
+                      {}
+                      <Card className={`border transition-all ${
+                        isOpen 
+                          ? 'border-blue-500/30 shadow-sm bg-blue-500/5' 
+                          : isCompleted 
+                            ? 'border-border shadow-none bg-muted/25'
+                            : 'border-border/60 opacity-75 shadow-none bg-muted/10'
+                      } rounded-xl`}>
+                        <div 
+                          onClick={() => handleToggleNode(node.nodeId, node.studentStatus)}
+                          className={`p-4 flex justify-between items-start cursor-pointer select-none`}
+                        >
+                          <div className="flex-1 space-y-1 pr-4">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              {node.testKind && node.testKind !== 'NONE' ? (
+                                <Badge variant="outline" className={`text-[9px] font-bold px-1.5 rounded-[4px] ${
+                                  node.testKind === 'PLACEMENT'
+                                    ? 'bg-amber-500/10 border-amber-500/20 text-amber-600 dark:text-amber-400'
+                                    : node.testKind === 'GATE'
+                                    ? 'bg-indigo-500/10 border-indigo-500/20 text-indigo-650 dark:text-indigo-400'
+                                    : 'bg-purple-500/10 border-purple-500/20 text-purple-600 dark:text-purple-400'
+                                }`}>
+                                  {node.testKind === 'PLACEMENT'
+                                    ? 'Test năng lực'
+                                    : node.testKind === 'GATE'
+                                    ? 'Test phân luồng'
+                                    : 'Test tự chọn'}
+                                </Badge>
+                              ) : (
+                                <Badge variant="outline" className={`text-[9px] font-bold px-1.5 rounded-[4px] ${
+                                  node.nodeType === 'AT_HOME' 
+                                    ? 'bg-purple-500/10 border-purple-500/20 text-purple-600 dark:text-purple-400' 
+                                    : 'bg-indigo-500/10 border-indigo-500/20 text-indigo-650 dark:text-indigo-400'
+                                }`}>
+                                  {node.nodeType === 'AT_HOME' ? 'Tự học' : 'Lên lớp'}
+                                </Badge>
+                              )}
+                              {node.isRequired && (
+                                <Badge variant="outline" className="text-[9px] font-bold px-1.5 rounded-[4px] bg-muted border-border text-muted-foreground">
+                                  Bắt buộc
+                                </Badge>
+                              )}
+                              {isCompleted && (
+                                <Badge variant="outline" className="text-[9px] font-bold px-1.5 rounded-[4px] bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400">
+                                  Đã hoàn thành
+                                </Badge>
+                              )}
+                              {isOpen && (
+                                <Badge variant="outline" className="text-[9px] font-bold px-1.5 rounded-[4px] bg-blue-500/10 border-blue-500/20 text-blue-600 dark:text-blue-400">
+                                  Đang học
+                                </Badge>
+                              )}
+                            </div>
+                            <h4 className="font-extrabold text-foreground text-sm leading-snug pt-1">{node.title}</h4>
+                            {node.description && (
+                              <p className="text-muted-foreground text-[11px] leading-relaxed line-clamp-2 mt-1">
+                                {node.description}
+                              </p>
+                            )}
+                          </div>
+                          {}
+                          <div className="flex flex-col items-end gap-1.5 text-right shrink-0">
+                            {node.nodeType === 'ON_CLASS' && (
+                              <>
+                                <div className="text-[10px] text-muted-foreground font-medium space-y-0.5">
+                                  {node.studyDate && (
+                                    <p className="font-semibold text-foreground">
+                                      {new Date(node.studyDate).toLocaleDateString("vi-VN")}
+                                    </p>
+                                  )}
+                                  {node.slotName && (
+                                    <p className="text-muted-foreground">
+                                      {node.slotName} ({node.startTime?.substring(0, 5)} - {node.endTime?.substring(0, 5)})
+                                    </p>
+                                  )}
+                                </div>
+                                {(() => {
+                                  const statusInfo = getOnClassStatus(node);
+                                  return (
+                                    <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border ${statusInfo.color}`}>
+                                      {statusInfo.text}
+                                    </span>
+                                  );
+                                })()}
+                              </>
+                            )}
+                            {!isLocked && (
+                              <div className="text-muted-foreground hover:text-foreground pt-0.5">
+                                {isExpanded ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {}
+                        {isExpanded && !isLocked && (
+                          <div className="p-4 pt-0 border-t border-border bg-card/50 rounded-b-xl space-y-4 text-xs">
+                            {loadingNodeContent[node.nodeId] ? (
+                              <div className="flex items-center justify-center py-6 gap-2">
+                                <Loader2 className="w-5 h-5 animate-spin text-primary" />
+                                <span className="text-muted-foreground text-[11px] font-medium">Đang tải nội dung bài học...</span>
+                              </div>
+                            ) : (
+                              <div className="space-y-4 pt-4 divide-y divide-border">
+                                {}
+                                {nodeContents[node.nodeId]?.materials && nodeContents[node.nodeId].materials.length > 0 && (
+                                  <div className="space-y-2">
+                                    <h5 className="font-bold text-foreground flex items-center gap-1.5 text-[11px] uppercase tracking-wider text-muted-foreground">
+                                      <FileText className="size-3.5" /> Tài liệu học tập
+                                    </h5>
+                                    <div className="space-y-2 pl-0.5">
+                                      {nodeContents[node.nodeId].materials.map((m) => (
+                                        <div key={m.materialId} className="p-2.5 border border-border bg-background rounded-xl">
+                                          <div className="flex items-center justify-between gap-3">
+                                            <span className="font-bold text-foreground block">{m.title}</span>
+                                            {m.video?.durationSeconds ? (
+                                              <span className="text-[10px] text-muted-foreground font-medium shrink-0">
+                                                {Math.round((m.video.durationSeconds || 0) / 60)} phút
+                                              </span>
+                                            ) : null}
+                                          </div>
+                                          <MaterialPreview material={m} />
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {}
+                                {nodeContents[node.nodeId]?.tests && nodeContents[node.nodeId].tests.length > 0 && (
+                                  <div className="space-y-2 pt-4">
+                                    <h5 className="font-bold text-foreground flex items-center gap-1.5 text-[11px] uppercase tracking-wider text-muted-foreground">
+                                      <Award className="size-3.5" /> Bài kiểm tra đánh giá
+                                    </h5>
+                                    <div className="space-y-2 pl-0.5">
+                                      {nodeContents[node.nodeId].tests.map((t) => (
+                                        <div key={t.testId} className="flex items-center justify-between p-2.5 border border-border bg-background rounded-xl gap-4">
+                                          <div className="flex-1 space-y-0.5">
+                                            <span className="font-bold text-foreground block">{t.title}</span>
+                                             <div className="flex items-center gap-3 text-[10px] text-muted-foreground font-medium flex-wrap">
+                                               <span>Thời gian: {t.durationMinutes} phút</span>
+                                               {node.testKind === 'PLACEMENT' && (node.placementYeuMax != null || node.placementTbMax != null) ? (
+                                                  <>
+                                                    <span>•</span>
+                                                    <span className="normal-case">
+                                                      Phân mức: Yếu ≤ {node.placementYeuMax}% · TB ≤ {node.placementTbMax}% · Khá &gt; {node.placementTbMax}%
+                                                    </span>
+                                                  </>
+                                                ) : node.testKind === 'GATE' ? null : (
+                                                  <>
+                                                    <span>•</span>
+                                                    <span>Yêu cầu đạt: {t.passingPercentage}%</span>
+                                                  </>
+                                                )}
+                                               {node.testKind === 'GATE' && (node.gateUpMin != null || node.gateDownMax != null) && (
+                                                 <>
+                                                   <span>•</span>
+                                                   <span className="text-emerald-600 dark:text-emerald-400 font-bold">Lên Level khi ≥ {node.gateUpMin ?? '—'}%</span>
+                                                   <span>•</span>
+                                                   <span className="text-rose-600 dark:text-rose-455 font-bold">Hạ Level khi &lt; {node.gateDownMax ?? '—'}%</span>
+                                                 </>
+                                               )}
+                                             </div>
+                                          </div>
+                                          {node.studentStatus === 'COMPLETED' ? (
+                                            <Button
+                                              disabled
+                                              className="h-7 px-3 text-[10px] bg-emerald-500 disabled:opacity-100 text-white font-bold rounded-lg flex items-center gap-1 shrink-0 cursor-not-allowed border-none shadow-none"
+                                            >
+                                              Đã đạt
+                                            </Button>
+                                          ) : (
+                                            <Button
+                                              onClick={() => navigate(`/student/tests/${t.testId}?csId=${selectedSubject?.classroomSubjectId}`)}
+                                              className="h-7 px-3 text-[10px] bg-primary hover:bg-primary/95 text-white font-bold rounded-lg flex items-center gap-1 shrink-0"
+                                            >
+                                              Vào thi <ArrowRight className="size-3" />
+                                            </Button>
+                                          )}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {}
+                                {(!nodeContents[node.nodeId]?.materials || nodeContents[node.nodeId].materials.length === 0) &&
+                                 (!nodeContents[node.nodeId]?.tests || nodeContents[node.nodeId].tests.length === 0) && (
+                                  <div className="text-center py-6 text-muted-foreground italic">
+                                    Bài học này chưa có nội dung tài liệu hoặc bài kiểm tra.
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </Card>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          <DialogFooter className="p-4 border-t border-border shrink-0 sm:justify-end">
+            <Button type="button" onClick={() => setIsRoadmapOpen(false)} className="font-semibold bg-primary text-primary-foreground">
+              Đóng
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}

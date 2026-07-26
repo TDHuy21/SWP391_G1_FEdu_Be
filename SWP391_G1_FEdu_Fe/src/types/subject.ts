@@ -1,5 +1,5 @@
-// Khớp chính xác với BE Subject entity JSON response
-// subjectId, subjectCode, subjectName, description, isDeleted, createdAt, updatedAt
+
+
 export interface Subject {
   subjectId: number;
   subjectCode: string;
@@ -14,10 +14,14 @@ export interface Subject {
   } | null;
   createdAt?: string;
   updatedAt?: string;
+  status?: string;
+  learningpathLength?: number;
 }
 
 export interface SubjectRequest {
   subjectCode: string;
   subjectName: string;
   description?: string;
+  status?: string;
+  learningpathLength?: number;
 }

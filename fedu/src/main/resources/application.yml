@@ -5,25 +5,42 @@ spring:
   application:
     name: fedu
 
+  servlet:
+    multipart:
+      max-file-size: ${MAX_UPLOAD_SIZE:10MB}
+      max-request-size: ${MAX_UPLOAD_SIZE:10MB}
+
   datasource:
-    url: jdbc:postgresql://ep-square-rain-aonmzhf3-pooler.c-2.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&prepareThreshold=0
+    url: ${DB_URL:jdbc:postgresql://ep-square-rain-aonmzhf3-pooler.c-2.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&prepareThreshold=0}
     username: neondb_owner
     password: ${DB_PASSWORD:}
     driver-class-name: org.postgresql.Driver
+    hikari:
+      max-lifetime: 270000
+      keepalive-time: 120000
+      minimum-idle: 2
+
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    baseline-version: 1
+    locations: classpath:db/migration
+
   jpa:
     hibernate:
       ddl-auto: none
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
+        default_batch_fetch_size: 50
     show-sql: true
 
   mail:
     host: smtp.gmail.com
     port: 587
-    username: hieudtfptu@gmail.com
+    username: fedu.swp391@gmail.com
     password: ${MAIL_PASSWORD:}
-    from: hieudtfptu@gmail.com
+    from: fedu.swp391@gmail.com
     properties:
       mail:
         smtp:
@@ -57,4 +74,10 @@ app:
   frontend-url: http://localhost:5173
   cors:
     allowed-origins: ${ALLOWED_ORIGINS:http://localhost,http://127.0.0.1,http://localhost:5173,http://localhost:3000,http://localhost:5174,http://localhost:5175}
+
+cloudinary:
+  cloud-name: ${CLOUDINARY_CLOUD_NAME:}
+  api-key: ${CLOUDINARY_API_KEY:}
+  api-secret: ${CLOUDINARY_API_SECRET:}
+  folder: ${CLOUDINARY_FOLDER:fedu}
 

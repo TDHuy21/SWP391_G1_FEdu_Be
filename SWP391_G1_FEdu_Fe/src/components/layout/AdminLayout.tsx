@@ -5,38 +5,53 @@ import {
   BookOpen,
   Users,
   GraduationCap,
-  Shield,
-  Search,
   Bell,
   Menu,
   X,
   ChevronDown,
   UserCircle,
   LogOut,
+  Clock,
+  Sun,
+  Moon,
+  Calendar,
 } from "lucide-react";
+import { useTheme } from "../../context/ThemeContext";
 import { useAuth } from "../../context/AuthContext";
+import logo from "../../assets/logo.png";
 import { getFullName, getInitials } from "../../utils/userHelpers";
+import { useNotifications } from "../../context/NotificationContext";
+import { Button } from "../ui/button";
 
 export function AdminLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [notiOpen, setNotiOpen] = useState(false);
+  const { theme, toggleTheme } = useTheme();
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const notiRef = useRef<HTMLDivElement>(null);
+  const { notifications, unreadCount, markAsRead, markAllAsRead, clearAll } = useNotifications();
 
   const menuItems = [
     { icon: Home, label: "Tổng quan", path: "/admin/dashboard" },
     { icon: Users, label: "Quản lý Người dùng", path: "/admin/users" },
-    { icon: BookOpen, label: "Quản lý Khóa học", path: "/admin/courses" },
+    { icon: BookOpen, label: "Quản lý Môn học", path: "/admin/subjects" },
     { icon: GraduationCap, label: "Quản lý Lớp học", path: "/admin/classes" },
+    { icon: Clock, label: "Quản lý Ca học", path: "/admin/slots" },
+    { icon: Calendar, label: "Quản lý Học kỳ", path: "/admin/semesters" },
   ];
 
-  // Close dropdown when clicking outside
+  
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setDropdownOpen(false);
+      }
+      if (notiRef.current && !notiRef.current.contains(event.target as Node)) {
+        setNotiOpen(false);
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
@@ -45,10 +60,11 @@ export function AdminLayout() {
 
   const handleLogout = () => {
     setDropdownOpen(false);
-    logout();
-    navigate("/login");
+    navigate("/");
+    setTimeout(() => {
+      logout();
+    }, 0);
   };
-
   const isActive = (path: string) => {
     if (path === "/admin/users") {
       return location.pathname.startsWith("/admin/users");
@@ -57,8 +73,8 @@ export function AdminLayout() {
   };
 
   return (
-    <div className="min-h-screen flex bg-slate-50 overflow-hidden relative">
-      {/* Mobile overlay */}
+    <div className="min-h-screen flex bg-background text-foreground overflow-hidden relative">
+      {}
       {sidebarOpen && (
         <div
           className="fixed inset-0 bg-black/50 z-40 lg:hidden transition-opacity duration-300"
@@ -66,41 +82,41 @@ export function AdminLayout() {
         />
       )}
 
-      {/* Sidebar */}
+      {}
       <aside
         className={`
           fixed lg:static inset-y-0 left-0 z-50 w-64
-          bg-slate-900 text-slate-300 flex flex-col shrink-0
+          bg-sidebar text-sidebar-foreground flex flex-col shrink-0 border-r border-sidebar-border
           transform transition-transform duration-300 ease-in-out
           ${sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}
         `}
       >
-        {/* Logo */}
-        <div className="p-6 border-b border-slate-800 flex items-center justify-between">
+        {}
+        <div className="p-4 border-b border-sidebar-border flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-gradient-to-br from-indigo-500 to-violet-600">
-              <Shield className="w-6 h-6 text-white" />
-            </div>
+            <img src={logo} alt="FEdu Logo" className="w-10 h-10 rounded-lg object-cover" />
             <div>
-              <div className="text-lg font-bold text-white">
-                F<span className="text-indigo-400">Edu</span>
+              <div className="text-sm font-bold text-sidebar-foreground leading-tight">
+                FEdu Learning
               </div>
-              <div className="text-xs text-slate-500">Admin Portal</div>
+              <div className="text-[10px] text-sidebar-foreground/60">Admin Portal</div>
             </div>
           </div>
-          {/* Close button for mobile */}
-          <button
+          {}
+          <Button
+            variant="ghost"
+            size="icon"
             onClick={() => setSidebarOpen(false)}
-            className="lg:hidden p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white"
+            className="lg:hidden h-8 w-8 text-sidebar-foreground/60 hover:text-sidebar-foreground"
           >
             <X className="w-5 h-5" />
-          </button>
+          </Button>
         </div>
 
-        {/* Navigation */}
+        {}
         <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
           <div className="px-3 mb-3 lg:block hidden">
-            <span className="text-[10px] font-bold text-slate-500 tracking-wider">
+            <span className="text-[10px] font-bold text-sidebar-foreground/40 tracking-wider">
               MENU CHÍNH
             </span>
           </div>
@@ -114,10 +130,10 @@ export function AdminLayout() {
                   navigate(item.path);
                   setSidebarOpen(false);
                 }}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 cursor-pointer border-0 ${
+                className={`w-full flex items-center gap-3 px-4 py-3 transition-all duration-200 cursor-pointer border-0 rounded-md ${
                   active
-                    ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/10 font-bold"
-                    : "hover:bg-slate-800 hover:text-white font-medium"
+                    ? "bg-sidebar-accent text-sidebar-accent-foreground font-bold"
+                    : "text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground font-medium"
                 }`}
               >
                 <Icon className="w-5 h-5 shrink-0" />
@@ -128,96 +144,193 @@ export function AdminLayout() {
         </nav>
       </aside>
 
-      {/* Main Content Wrapper */}
+      {}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden h-screen">
-        {/* Topbar */}
-        <header className="shrink-0 px-6 py-4 bg-white border-b border-slate-200 shadow-sm z-30">
+        {}
+        <header className="shrink-0 px-6 py-4 bg-background border-b border-border z-30">
           <div className="flex items-center justify-between gap-4">
-            {/* Left side: Hamburger menu + Search */}
+            {}
             <div className="flex items-center gap-3 flex-1">
-              <button
+              <Button
+                variant="ghost"
+                size="icon"
                 onClick={() => setSidebarOpen(true)}
-                className="lg:hidden p-2 rounded-lg text-slate-500 hover:bg-slate-100"
+                className="lg:hidden"
               >
                 <Menu className="w-5 h-5" />
-              </button>
+              </Button>
 
-              <div className="hidden sm:flex items-center gap-2 px-4 py-2 bg-slate-50 border border-slate-200 rounded-full max-w-md flex-1">
-                <Search className="w-4 h-4 shrink-0 text-slate-400" />
-                <input
-                  type="text"
-                  placeholder="Tìm kiếm..."
-                  className="flex-1 bg-transparent outline-none text-sm text-slate-800"
-                />
-              </div>
+
             </div>
 
-            {/* Right side: Notifications + Avatar Dropdown */}
+            {}
             <div className="flex items-center gap-3">
-              <button className="relative p-2 rounded-lg text-slate-500 hover:bg-slate-100">
-                <Bell className="w-5 h-5" />
-                <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-rose-500" />
-              </button>
+              {}
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={toggleTheme}
+                className="w-9 h-9 text-muted-foreground hover:text-foreground"
+                aria-label="Toggle theme"
+              >
+                {theme === "dark" ? <Sun className="w-4.5 h-4.5" /> : <Moon className="w-4.5 h-4.5" />}
+              </Button>
 
-              {/* User Dropdown */}
-              <div className="relative pl-3 border-l border-slate-200" ref={dropdownRef}>
+              {}
+              <div className="relative" ref={notiRef}>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setNotiOpen(!notiOpen)}
+                  className="relative text-muted-foreground hover:text-foreground"
+                >
+                  <Bell className="w-5 h-5" />
+                  {unreadCount > 0 && (
+                    <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-destructive rounded-full ring-2 ring-background animate-pulse" />
+                  )}
+                </Button>
+
+                {}
+                {notiOpen && (
+                  <div className="absolute right-0 top-full mt-2 w-80 shadow-xl bg-popover text-popover-foreground border border-border overflow-hidden z-50 rounded-lg">
+                    <div className="p-3 border-b border-border flex items-center justify-between bg-accent/30">
+                      <span className="font-semibold text-sm text-foreground">Thông báo</span>
+                      {unreadCount > 0 && (
+                        <Button
+                          variant="link"
+                          onClick={markAllAsRead}
+                          className="text-xs h-auto p-0 text-primary"
+                        >
+                          Đọc tất cả
+                        </Button>
+                      )}
+                    </div>
+                    
+                    <div className="max-h-72 overflow-y-auto divide-y divide-border">
+                      {notifications.length === 0 ? (
+                        <div className="p-6 text-center text-xs text-muted-foreground">
+                          Không có thông báo nào
+                        </div>
+                      ) : (
+                        notifications.map((noti) => (
+                          <div
+                            key={noti.id}
+                            onClick={() => {
+                              markAsRead(noti.id);
+                            }}
+                            className={`p-3 text-left transition-colors cursor-pointer ${
+                              noti.isRead ? 'bg-popover hover:bg-accent/40' : 'bg-accent/20 hover:bg-accent/50'
+                            }`}
+                          >
+                            <div className="flex justify-between items-start gap-2">
+                              <span className={`text-xs font-medium ${noti.isRead ? 'text-foreground/80' : 'text-foreground font-bold'}`}>
+                                {noti.title}
+                              </span>
+                              {!noti.isRead && (
+                                <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0 mt-1" />
+                              )}
+                            </div>
+                            {noti.message && (
+                              <p className="text-[11px] text-muted-foreground mt-0.5 line-clamp-2">
+                                {noti.message}
+                              </p>
+                            )}
+                            <span className="text-[9px] text-muted-foreground/60 mt-1 block">
+                              {new Date(noti.createdAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })} - {new Date(noti.createdAt).toLocaleDateString('vi-VN')}
+                            </span>
+                          </div>
+                        ))
+                      )}
+                    </div>
+
+                    {notifications.length > 0 && (
+                      <div className="p-2 border-t border-border text-center bg-accent/30">
+                        <Button
+                          variant="link"
+                          onClick={clearAll}
+                          className="text-xs h-auto p-0 text-destructive hover:text-destructive/80 font-medium"
+                        >
+                          Xóa tất cả
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {}
+              <div className="relative pl-3 border-l border-border" ref={dropdownRef}>
                 <button
                   onClick={() => setDropdownOpen(!dropdownOpen)}
-                  className="flex items-center gap-2 p-1 rounded-lg hover:bg-slate-50 transition-colors cursor-pointer"
+                  className="flex items-center gap-2 p-1 rounded-lg hover:bg-accent transition-colors cursor-pointer border-none bg-transparent"
                 >
-                  <div className="w-9 h-9 rounded-full bg-indigo-50 border border-indigo-100 flex items-center justify-center shrink-0">
-                    <span className="text-indigo-600 font-semibold text-sm">
-                      {getInitials(user)}
-                    </span>
+                  <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0 overflow-hidden bg-muted text-foreground border border-border">
+                    {user?.avatarUrl ? (
+                      <img src={user.avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
+                    ) : (
+                      <span className="font-semibold text-sm">
+                        {getInitials(user)}
+                      </span>
+                    )}
                   </div>
                   <div className="hidden md:block text-left">
-                    <div className="text-sm font-semibold text-slate-800 max-w-[120px] truncate">
+                    <div className="text-sm font-semibold text-foreground max-w-[120px] truncate">
                       {getFullName(user) || "Administrator"}
                     </div>
-                    <div className="text-xs text-slate-400">Quản trị viên</div>
+                    <div className="text-xs text-muted-foreground">Quản trị viên</div>
                   </div>
                   <ChevronDown
-                    className={`w-4 h-4 text-slate-400 transition-transform ${
+                    className={`w-4 h-4 text-muted-foreground transition-transform ${
                       dropdownOpen ? "rotate-180" : ""
                     }`}
                   />
                 </button>
 
-                {/* Dropdown Menu Overlay */}
+                {}
                 {dropdownOpen && (
-                  <div className="absolute right-0 top-full mt-2 w-64 rounded-xl shadow-xl bg-white border border-slate-200 overflow-hidden z-50">
-                    {/* User Info Header */}
-                    <div className="p-4 border-b border-slate-100 bg-slate-50">
+                  <div className="absolute right-0 top-full mt-2 w-64 shadow-xl bg-popover text-popover-foreground border border-border rounded-xl overflow-hidden z-50">
+                    {}
+                    <div className="p-4 border-b border-border bg-popover">
                       <div className="flex items-center gap-3 mb-3">
-                        <div className="w-12 h-12 rounded-full bg-indigo-600 flex items-center justify-center shrink-0 shadow-sm">
-                          <span className="text-white text-lg font-semibold">
-                            {getInitials(user)}
-                          </span>
+                        <div className="w-12 h-12 rounded-full flex items-center justify-center shrink-0 overflow-hidden bg-primary text-primary-foreground">
+                          {user?.avatarUrl ? (
+                            <img src={user.avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
+                          ) : (
+                            <span className="text-lg font-semibold">
+                              {getInitials(user)}
+                            </span>
+                          )}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <div className="text-sm font-semibold text-slate-800 truncate">
+                          <div className="text-sm font-semibold text-foreground truncate">
                             {getFullName(user) || "Administrator"}
                           </div>
-                          <div className="text-xs text-slate-400 truncate">
+                          <div className="text-xs text-muted-foreground truncate">
                             {user?.email || "admin@fedu.vn"}
                           </div>
                         </div>
                       </div>
-                      <div className="inline-flex items-center px-2.5 py-1 rounded-full bg-indigo-50 text-[11px] text-indigo-600 font-semibold">
-                        <span className="w-1.5 h-1.5 rounded-full bg-indigo-600 mr-1.5" />
+                      <div className="inline-flex items-center px-2.5 py-1 text-[11px] font-semibold bg-secondary text-secondary-foreground rounded-md">
+                        <span className="w-1.5 h-1.5 rounded-full mr-1.5 bg-primary" />
                         Quản trị viên
                       </div>
                     </div>
 
-                    {/* Actions Menu */}
-                    <div className="py-1.5">
-                      <button className="w-full flex items-center gap-3 px-4 py-2.5 text-slate-700 hover:bg-slate-50 text-sm transition-colors text-left border-0 cursor-pointer">
-                        <UserCircle className="w-4 h-4 text-slate-400" />
+                    {}
+                    <div className="py-1.5 bg-popover">
+                      <button
+                        onClick={() => {
+                          setDropdownOpen(false);
+                          navigate("/admin/profile");
+                        }}
+                        className="w-full flex items-center gap-3 px-4 py-2.5 text-foreground hover:bg-accent text-sm transition-colors text-left border-0 cursor-pointer bg-transparent"
+                      >
+                        <UserCircle className="w-4 h-4 text-muted-foreground" />
                         Thông tin cá nhân
                       </button>
                       <button
                         onClick={handleLogout}
-                        className="w-full flex items-center gap-3 px-4 py-2.5 text-rose-600 hover:bg-rose-50 text-sm font-medium transition-colors text-left border-0 cursor-pointer"
+                        className="w-full flex items-center gap-3 px-4 py-2.5 text-destructive hover:bg-destructive/10 text-sm font-medium transition-colors text-left border-0 cursor-pointer bg-transparent"
                       >
                         <LogOut className="w-4 h-4" />
                         Đăng xuất
@@ -230,8 +343,8 @@ export function AdminLayout() {
           </div>
         </header>
 
-        {/* Page Content */}
-        <main className="flex-1 overflow-auto bg-slate-50">
+        {}
+        <main className="flex-1 overflow-auto bg-background text-foreground border-l border-border">
           <div className="max-w-7xl mx-auto p-6">
             <Outlet />
           </div>

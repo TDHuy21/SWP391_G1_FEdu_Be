@@ -28,7 +28,7 @@ public class UserAccount extends AbstractEntity<Long> implements UserDetails {
     @Column(name = "user_id")
     private long userId;
 
-    @Column(name = "email", nullable = false, unique = true)
+    @Column(name = "email", nullable = false)
     private String email;
 
     @Column(name = "password", nullable = false)
@@ -44,6 +44,7 @@ public class UserAccount extends AbstractEntity<Long> implements UserDetails {
     @Column(name = "avatar_url", columnDefinition = "TEXT")
     private String avatarUrl;
 
+    @Builder.Default
     @Column(name = "is_deleted")
     private Boolean isDeleted = false;
 

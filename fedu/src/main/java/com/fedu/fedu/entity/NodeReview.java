@@ -5,15 +5,16 @@ import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import lombok.*;
 
+import java.util.ArrayList;
+import java.util.List;
+
 @Getter
 @Setter
 @Entity
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@Table(name = "node_reviews", uniqueConstraints = {
-        @UniqueConstraint(columnNames = {"student_id", "node_id"})
-})
+@Table(name = "node_reviews")
 public class NodeReview extends AbstractEntity<Long> {
 
     @Id
@@ -25,9 +26,28 @@ public class NodeReview extends AbstractEntity<Long> {
     @JoinColumn(name = "node_id", nullable = false)
     private LearningNode learningNode;
 
+    
+
+
+
+
+
+
+
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "student_id", nullable = false)
-    private UserAccount student;
+    private UserAccount author;
+
+    
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "parent_review_id")
+    private NodeReview parentReview;
+
+    
+    @Builder.Default
+    @OneToMany(mappedBy = "parentReview", fetch = FetchType.LAZY)
+    private List<NodeReview> replies = new ArrayList<>();
 
     @Min(1)
     @Max(5)
@@ -37,6 +57,7 @@ public class NodeReview extends AbstractEntity<Long> {
     @Column(name = "content", columnDefinition = "TEXT")
     private String content;
 
+    @Builder.Default
     @Column(name = "is_deleted")
     private Boolean isDeleted = false;
 }

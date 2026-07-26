@@ -17,9 +17,11 @@ public class LearningPathResponse {
     private String pathName;
     private String description;
     private Long createdById;
-    // Gộp từ ClassroomLearningPathResponse
-    private Long classroomId;
-    private Long originalPathId;
+    private String creatorName;
+    private String creatorRole;
+    private Long classroomSubjectId;
+    private LocalDateTime publishedAt;
+    private Long publishedById;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

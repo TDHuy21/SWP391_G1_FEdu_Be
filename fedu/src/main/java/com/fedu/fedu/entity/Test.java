@@ -1,5 +1,6 @@
 package com.fedu.fedu.entity;
 
+import com.fedu.fedu.utils.enums.TestKind;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -19,8 +20,9 @@ public class Test extends AbstractEntity<Long> {
     @Column(name = "test_id")
     private Long testId;
 
+    
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "node_id", nullable = false)
+    @JoinColumn(name = "node_id")
     private LearningNode learningNode;
 
     @Column(name = "title", nullable = false)
@@ -32,10 +34,34 @@ public class Test extends AbstractEntity<Long> {
     @Column(name = "duration_minutes")
     private Integer durationMinutes;
 
-    /** Điểm đậu tính theo %. Ví dụ: 50.00 = 50% */
+    
     @Column(name = "passing_percentage", precision = 5, scale = 2)
     private BigDecimal passingPercentage;
 
+    @Column(name = "order_index")
+    private Integer orderIndex;
+
+    
+
+
+
+    @Column(name = "released_at")
+    private java.time.LocalDateTime releasedAt;
+
+    
+
+
+
+    @Column(name = "release_ends_at")
+    private java.time.LocalDateTime releaseEndsAt;
+
+    
+    @Builder.Default
+    @Enumerated(EnumType.STRING)
+    @Column(name = "test_kind", nullable = false)
+    private TestKind testKind = TestKind.NORMAL;
+
+    @Builder.Default
     @Column(name = "is_deleted")
     private Boolean isDeleted = false;
 }

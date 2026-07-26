@@ -4,13 +4,10 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.*;
 
-/**
- * Lộ trình học tập.
- *
- * - Nếu classroom != null và originalPath != null: đây là bản lộ trình được clone riêng cho 1 lớp học
- *   (trước đây là ClassroomLearningPath).
- * - Nếu classroom == null: đây là lộ trình mẫu (template) cho một môn học.
- */
+
+
+
+
 @Getter
 @Setter
 @Entity
@@ -40,22 +37,18 @@ public class LearningPath extends AbstractEntity<Long> {
     @JoinColumn(name = "created_by")
     private UserAccount createdBy;
 
-    /**
-     * Lớp học sở hữu lộ trình này (nullable).
-     * Nếu có giá trị => đây là lộ trình riêng của lớp học đó (clone từ originalPath).
-     */
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "classroom_id")
-    private Classroom classroom;
+    @JoinColumn(name = "classroom_subject_id")
+    private ClassroomSubject classroomSubject;   
 
-    /**
-     * Lộ trình gốc (template) được dùng làm nguồn khi clone (nullable).
-     * Chỉ có giá trị khi đây là bản clone cho lớp học.
-     */
+    @Column(name = "published_at")
+    private java.time.LocalDateTime publishedAt;
+
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "original_path_id")
-    private LearningPath originalPath;
+    @JoinColumn(name = "published_by")
+    private UserAccount publishedBy;
 
+    @Builder.Default
     @Column(name = "is_deleted")
     private Boolean isDeleted = false;
 }

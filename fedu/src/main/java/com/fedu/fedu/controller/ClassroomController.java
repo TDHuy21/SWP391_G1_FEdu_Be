@@ -1,7 +1,7 @@
 package com.fedu.fedu.controller;
 
-import com.fedu.fedu.dto.req.AssignTeacherRequest;
 import com.fedu.fedu.dto.req.ClassroomRequest;
+import com.fedu.fedu.dto.req.UpdateClassroomStatusRequest;
 import com.fedu.fedu.dto.res.ClassroomResponse;
 import com.fedu.fedu.dto.res.ResponseData;
 import com.fedu.fedu.entity.UserAccount;
@@ -29,16 +29,14 @@ public class ClassroomController {
 
     private final ClassroomService classroomService;
 
-    @Operation(summary = "Create new classroom",
-            description = "TEACHER creates class: lecturerId is automatically themselves. ADMIN can specify lecturerId.")
-    @PreAuthorize("hasAnyRole('TEACHER', 'ADMIN')")
+    @Operation(summary = "Create new classroom (Admin only)")
+    @PreAuthorize("hasRole('ADMIN')")
+    @ResponseStatus(HttpStatus.CREATED)
     @PostMapping
-    public ResponseData<ClassroomResponse> createClassroom(
-            @Valid @RequestBody ClassroomRequest request,
-            @AuthenticationPrincipal UserAccount currentUser) {
-        log.info("Request create classroom: {} for subject: {}", request.getClassName(), request.getSubjectId());
-        ClassroomResponse response = classroomService.createClassroom(request, currentUser.getUserId());
-        return new ResponseData<>(HttpStatus.CREATED.value(), "Classroom created successfully", response);
+    public ResponseData<ClassroomResponse> createClassroom(@Valid @RequestBody ClassroomRequest request) {
+        log.info("Request create classroom: {}", request.getClassName());
+        return new ResponseData<>(HttpStatus.CREATED.value(), "Classroom created successfully",
+                classroomService.createClassroom(request));
     }
 
     @Operation(summary = "Get all classrooms (Admin only)")
@@ -77,11 +75,17 @@ public class ClassroomController {
                 classroomService.getClassroomsByTeacher(teacherId));
     }
 
-    @Operation(summary = "Get classrooms by student")
-    @PreAuthorize("hasAnyRole('TEACHER', 'ADMIN', 'STUDENT')")
     @GetMapping("/student/{studentId}")
-    public ResponseData<List<ClassroomResponse>> getClassroomsByStudent(@PathVariable long studentId) {
-        log.info("Request get classrooms by student id: {}", studentId);
+    public ResponseData<List<ClassroomResponse>> getClassroomsByStudent(
+            @PathVariable long studentId,
+            @AuthenticationPrincipal UserAccount currentUser) {
+        boolean isStudentOnly = currentUser.getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equals("ROLE_STUDENT"))
+                && currentUser.getAuthorities().stream()
+                .noneMatch(a -> a.getAuthority().equals("ROLE_ADMIN") || a.getAuthority().equals("ROLE_TEACHER"));
+        if (isStudentOnly && studentId != currentUser.getUserId()) {
+            throw new org.springframework.security.access.AccessDeniedException("Bạn chỉ được xem lớp của chính mình");
+        }
         return new ResponseData<>(HttpStatus.OK.value(), "Retrieved classroom list successfully",
                 classroomService.getClassroomsByStudent(studentId));
     }
@@ -97,8 +101,19 @@ public class ClassroomController {
         return new ResponseData<>(HttpStatus.OK.value(), "Classroom updated successfully", response);
     }
 
-    @Operation(summary = "Delete classroom (soft delete)")
-    @PreAuthorize("hasAnyRole('TEACHER', 'ADMIN')")
+    @Operation(summary = "Đổi trạng thái lớp học (bắt đầu / kết thúc / mở lại) — chỉ Admin")
+    @PreAuthorize("hasRole('ADMIN')")
+    @PatchMapping("/{classroomId}/status")
+    public ResponseData<ClassroomResponse> updateClassroomStatus(
+            @PathVariable Long classroomId,
+            @Valid @RequestBody UpdateClassroomStatusRequest request) {
+        log.info("Request update classroom {} status -> {}", classroomId, request.getStatus());
+        return new ResponseData<>(HttpStatus.OK.value(), "Classroom status updated successfully",
+                classroomService.updateClassroomStatus(classroomId, request.getStatus()));
+    }
+
+    @Operation(summary = "Xóa lớp học (soft delete, chỉ lớp chưa bắt đầu) — chỉ Admin")
+    @PreAuthorize("hasRole('ADMIN')")
     @DeleteMapping("/{classroomId}")
     public ResponseData<Void> deleteClassroom(@PathVariable Long classroomId) {
         log.info("Request delete classroom id: {}", classroomId);
@@ -106,14 +121,4 @@ public class ClassroomController {
         return new ResponseData<>(HttpStatus.OK.value(), "Classroom deleted successfully");
     }
 
-    @Operation(summary = "Assign / change teacher for classroom (Admin only)")
-    @PreAuthorize("hasRole('ADMIN')")
-    @PatchMapping("/{classroomId}/assign-teacher")
-    public ResponseData<ClassroomResponse> assignTeacher(
-            @PathVariable Long classroomId,
-            @Valid @RequestBody AssignTeacherRequest request) {
-        log.info("Request assign teacher id: {} to classroom id: {}", request.getTeacherId(), classroomId);
-        ClassroomResponse response = classroomService.assignTeacher(classroomId, request);
-        return new ResponseData<>(HttpStatus.OK.value(), "Teacher assigned successfully", response);
-    }
 }

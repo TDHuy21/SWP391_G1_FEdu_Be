@@ -27,11 +27,20 @@ public class Subject extends AbstractEntity<Long> {
     @Column(name = "description", columnDefinition = "TEXT")
     private String description;
 
+    
+    @Column(name = "learningpath_length")
+    private Integer learningpathLength;
+
     @JsonIgnore
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "created_by")
     private UserAccount createdBy;
 
+    @Builder.Default
     @Column(name = "is_deleted")
     private Boolean isDeleted = false;
+
+    @Builder.Default
+    @Column(name = "status", nullable = false, length = 50)
+    private String status = "draft";
 }

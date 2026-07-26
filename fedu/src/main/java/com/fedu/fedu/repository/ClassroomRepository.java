@@ -13,6 +13,31 @@ public interface ClassroomRepository extends JpaRepository<Classroom, Long> {
 
     Optional<Classroom> findByClassroomIdAndIsDeletedFalse(Long classroomId);
 
+    boolean existsBySemester_SemesterId(Long semesterId);
+
     @Query("SELECT c FROM Classroom c WHERE c.isDeleted = false ORDER BY c.createdAt DESC")
     List<Classroom> findAllActive();
+
+    List<Classroom> findAllByIsDeletedFalse();
+
+    long countByIsDeletedFalse();
+
+    
+    @Query("""
+            SELECT c.classroomId AS classroomId,
+                   COUNT(DISTINCT cs.id) AS subjectCount,
+                   COUNT(DISTINCT css.id) AS studentCount
+            FROM Classroom c
+            LEFT JOIN ClassroomSubject cs ON cs.classroom = c
+            LEFT JOIN ClassroomSubjectStudent css ON css.classroomSubject = cs
+            WHERE c.isDeleted = false
+            GROUP BY c.classroomId
+            """)
+    List<ClassroomCounts> countSubjectsAndStudentsPerClassroom();
+
+    interface ClassroomCounts {
+        Long getClassroomId();
+        long getSubjectCount();
+        long getStudentCount();
+    }
 }

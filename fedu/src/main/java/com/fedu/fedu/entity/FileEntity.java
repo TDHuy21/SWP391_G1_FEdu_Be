@@ -3,10 +3,10 @@ package com.fedu.fedu.entity;
 import jakarta.persistence.*;
 import lombok.*;
 
-/**
- * Lưu trữ các file tài liệu (PDF, Word, v.v.) đính kèm trong NodeMaterial.
- * Sử dụng tên "FileEntity" để tránh xung đột với java.io.File.
- */
+
+
+
+
 @Getter
 @Setter
 @Entity
@@ -34,9 +34,18 @@ public class FileEntity extends AbstractEntity<Long> {
     @Column(name = "file_type")
     private String fileType;
 
+    
+    @Column(name = "public_id")
+    private String publicId;
+
+    
+    @Column(name = "resource_type")
+    private String resourceType;
+
     @Column(name = "description", columnDefinition = "TEXT")
     private String description;
 
+    @Builder.Default
     @Column(name = "is_deleted")
     private Boolean isDeleted = false;
 }

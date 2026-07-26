@@ -1,5 +1,6 @@
 package com.fedu.fedu.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -20,15 +21,16 @@ public class StudentTestAttempt extends AbstractEntity<Long> {
     @Column(name = "attempt_id")
     private Long attemptId;
 
+    @JsonIgnore
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "test_id", nullable = false)
     private Test test;
 
+    @JsonIgnore
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "student_id", nullable = false)
     private UserAccount student;
 
-    /** Điểm tổng của lần thi (null khi chưa nộp/chưa chấm xong) */
     @Column(name = "score", precision = 5, scale = 2)
     private BigDecimal score;
 
@@ -37,5 +39,14 @@ public class StudentTestAttempt extends AbstractEntity<Long> {
 
     @Column(name = "submitted_at")
     private LocalDateTime submittedAt;
-    // created_at và updated_at kế thừa từ AbstractEntity
+
+    @Builder.Default
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status")
+    private com.fedu.fedu.utils.enums.AttemptStatus status = com.fedu.fedu.utils.enums.AttemptStatus.SUBMITTED;
+
+    @Builder.Default
+    @Column(name = "tab_out_count")
+    private Integer tabOutCount = 0;
+    
 }

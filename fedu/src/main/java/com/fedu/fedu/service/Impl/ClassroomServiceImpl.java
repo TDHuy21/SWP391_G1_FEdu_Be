@@ -1,26 +1,26 @@
 package com.fedu.fedu.service.Impl;
 
-import com.fedu.fedu.dto.req.AssignTeacherRequest;
 import com.fedu.fedu.dto.req.ClassroomRequest;
 import com.fedu.fedu.dto.res.ClassroomResponse;
+import com.fedu.fedu.dto.res.ClassroomSubjectResponse;
 import com.fedu.fedu.dto.res.SubjectResponse;
 import com.fedu.fedu.entity.Classroom;
 import com.fedu.fedu.entity.ClassroomSubject;
-import com.fedu.fedu.entity.Subject;
-import com.fedu.fedu.entity.UserAccount;
 import com.fedu.fedu.exception.ResourceNotFoundException;
 import com.fedu.fedu.repository.ClassroomRepository;
 import com.fedu.fedu.repository.ClassroomSubjectRepository;
 import com.fedu.fedu.repository.ClassroomSubjectStudentRepository;
-import com.fedu.fedu.repository.SubjectRepository;
 import com.fedu.fedu.repository.UserAccountRepository;
+import com.fedu.fedu.entity.UserAccount;
 import com.fedu.fedu.service.ClassroomService;
+import com.fedu.fedu.utils.enums.ClassroomStatus;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -31,38 +31,28 @@ public class ClassroomServiceImpl implements ClassroomService {
     private final ClassroomRepository classroomRepository;
     private final ClassroomSubjectStudentRepository classroomSubjectStudentRepository;
     private final ClassroomSubjectRepository classroomSubjectRepository;
-    private final SubjectRepository subjectRepository;
     private final UserAccountRepository userAccountRepository;
+    private final com.fedu.fedu.repository.SemesterRepository semesterRepository;
 
     @Override
     @Transactional
-    public ClassroomResponse createClassroom(ClassroomRequest request, long currentUserId) {
-        log.info("Creating classroom '{}' for subject id: {}", request.getClassName(), request.getSubjectId());
+    public ClassroomResponse createClassroom(ClassroomRequest request) {
+        log.info("Creating classroom '{}'", request.getClassName());
 
-        Subject subject = subjectRepository.findBySubjectIdAndIsDeletedFalse(request.getSubjectId())
-                .orElseThrow(() -> new ResourceNotFoundException("Subject not found with id: " + request.getSubjectId()));
-
-        // TEACHER: lecturerId = themselves; ADMIN: can assign a different lecturerId
-        long resolvedLecturerId = (request.getLecturerId() != null) ? request.getLecturerId() : currentUserId;
-        UserAccount lecturer = userAccountRepository.findById(resolvedLecturerId)
-                .orElseThrow(() -> new ResourceNotFoundException("Lecturer not found with id: " + resolvedLecturerId));
+        com.fedu.fedu.entity.Semester semester = resolveSemester(request.getSemesterId());
+        if (semester != null && getSemesterRelation(semester) == SemesterRelation.PAST) {
+            throw new com.fedu.fedu.exception.InvalidDataException("Không thể tạo lớp học với học kỳ trong quá khứ.");
+        }
 
         Classroom classroom = Classroom.builder()
                 .className(request.getClassName().trim())
-                .semester(request.getSemester())
+                .semester(semester)
                 .description(request.getDescription())
+                .status(ClassroomStatus.INACTIVE)
                 .isDeleted(false)
                 .build();
+
         Classroom saved = classroomRepository.save(classroom);
-
-        // Tạo bản ghi ClassroomSubject để liên kết lớp - môn học - giảng viên
-        ClassroomSubject classroomSubject = ClassroomSubject.builder()
-                .classroom(saved)
-                .subject(subject)
-                .lecturer(lecturer)
-                .build();
-        classroomSubjectRepository.save(classroomSubject);
-
         log.info("Classroom created with id: {}", saved.getClassroomId());
         return toResponse(saved);
     }
@@ -71,45 +61,88 @@ public class ClassroomServiceImpl implements ClassroomService {
     @Transactional
     public ClassroomResponse updateClassroom(Long classroomId, ClassroomRequest request) {
         log.info("Updating classroom id: {}", classroomId);
+        assertTeacherOwnsClassroom(classroomId);
+        Classroom classroom = classroomRepository.findById(classroomId)
+                .orElseThrow(() -> new ResourceNotFoundException("Classroom not found with id: " + classroomId));
 
+        com.fedu.fedu.entity.Semester newSemester = resolveSemester(request.getSemesterId());
+
+        if (classroom.getStatus() == ClassroomStatus.COMPLETED) {
+            Long oldSemId = classroom.getSemester() != null ? classroom.getSemester().getSemesterId() : null;
+            if (!java.util.Objects.equals(oldSemId, request.getSemesterId())) {
+                throw new com.fedu.fedu.exception.InvalidDataException("Không thể chỉnh sửa học kỳ của lớp học đã kết thúc.");
+            }
+        }
+
+        if (newSemester != null) {
+            SemesterRelation relation = getSemesterRelation(newSemester);
+            if (classroom.getStatus() == ClassroomStatus.ACTIVE) {
+                if (relation != SemesterRelation.PRESENT) {
+                    throw new com.fedu.fedu.exception.InvalidDataException("Lớp học đang hoạt động chỉ có thể chọn học kỳ hiện tại.");
+                }
+            } else if (classroom.getStatus() == ClassroomStatus.INACTIVE) {
+                if (relation == SemesterRelation.PAST) {
+                    throw new com.fedu.fedu.exception.InvalidDataException("Không thể lưu lớp học với học kỳ trong quá khứ.");
+                }
+            }
+        }
+
+        classroom.setClassName(request.getClassName().trim());
+        classroom.setSemester(newSemester);
+        classroom.setDescription(request.getDescription());
+        // Trạng thái vòng đời chỉ đổi qua updateClassroomStatus (admin), không qua update thông tin.
+
+        return toResponse(classroomRepository.save(classroom));
+    }
+
+    @Override
+    @Transactional
+    public ClassroomResponse updateClassroomStatus(Long classroomId, ClassroomStatus status) {
+        log.info("Updating classroom {} status -> {}", classroomId, status);
         Classroom classroom = classroomRepository.findByClassroomIdAndIsDeletedFalse(classroomId)
                 .orElseThrow(() -> new ResourceNotFoundException("Classroom not found with id: " + classroomId));
 
-        classroom.setClassName(request.getClassName().trim());
-        classroom.setSemester(request.getSemester());
-        classroom.setDescription(request.getDescription());
-
-        // Cập nhật subject và lecturer trong ClassroomSubject nếu cần
-        if (request.getSubjectId() != null) {
-            Subject newSubject = subjectRepository.findBySubjectIdAndIsDeletedFalse(request.getSubjectId())
-                    .orElseThrow(() -> new ResourceNotFoundException("Subject not found with id: " + request.getSubjectId()));
-
-            ClassroomSubject cs = classroomSubjectRepository
-                    .findByClassroomClassroomId(classroomId)
-                    .stream().findFirst().orElse(ClassroomSubject.builder().classroom(classroom).build());
-
-            cs.setSubject(newSubject);
-
-            if (request.getLecturerId() != null) {
-                UserAccount newLecturer = userAccountRepository.findById(request.getLecturerId())
-                        .orElseThrow(() -> new ResourceNotFoundException("Lecturer not found with id: " + request.getLecturerId()));
-                cs.setLecturer(newLecturer);
-            }
-            classroomSubjectRepository.save(cs);
+        ClassroomStatus current = classroom.getStatus();
+        if (current == status) {
+            return toResponse(classroom);
+        }
+        // Chuyển hợp lệ: chưa bắt đầu -> hoạt động (bắt đầu), hoạt động -> hoàn thành (kết thúc),
+        // hoàn thành -> hoạt động (mở lại). Không cho quay về "chưa bắt đầu" sau khi đã bắt đầu.
+        boolean allowed = (current == ClassroomStatus.INACTIVE && status == ClassroomStatus.ACTIVE)
+                || (current == ClassroomStatus.ACTIVE && status == ClassroomStatus.COMPLETED)
+                || (current == ClassroomStatus.COMPLETED && status == ClassroomStatus.ACTIVE);
+        if (!allowed) {
+            throw new com.fedu.fedu.exception.InvalidDataException(
+                    "Không thể chuyển lớp từ trạng thái '" + current.getValue() + "' sang '" + status.getValue() + "'");
         }
 
-        Classroom updated = classroomRepository.save(classroom);
-        return toResponse(updated);
+        if (status == ClassroomStatus.ACTIVE) {
+            if (classroom.getSemester() == null) {
+                throw new com.fedu.fedu.exception.InvalidDataException("Vui lòng thiết lập học kỳ trước khi bắt đầu lớp học.");
+            }
+            SemesterRelation relation = getSemesterRelation(classroom.getSemester());
+            if (relation == SemesterRelation.FUTURE) {
+                throw new com.fedu.fedu.exception.InvalidDataException("Không thể bắt đầu lớp học thuộc học kỳ tương lai.");
+            }
+            if (relation == SemesterRelation.PAST) {
+                throw new com.fedu.fedu.exception.InvalidDataException("Không thể bắt đầu lớp học thuộc học kỳ quá khứ.");
+            }
+        }
+
+        classroom.setStatus(status);
+        return toResponse(classroomRepository.save(classroom));
     }
 
     @Override
     @Transactional
     public void deleteClassroom(Long classroomId) {
-        log.info("Soft-deleting classroom id: {}", classroomId);
-
+        log.info("Deleting classroom id: {}", classroomId);
         Classroom classroom = classroomRepository.findByClassroomIdAndIsDeletedFalse(classroomId)
                 .orElseThrow(() -> new ResourceNotFoundException("Classroom not found with id: " + classroomId));
-
+        if (classroom.getStatus() != ClassroomStatus.INACTIVE) {
+            throw new com.fedu.fedu.exception.InvalidDataException(
+                    "Chỉ có thể xóa lớp chưa bắt đầu. Lớp đang hoạt động hoặc đã kết thúc không được xóa.");
+        }
         classroom.setIsDeleted(true);
         classroomRepository.save(classroom);
     }
@@ -125,9 +158,18 @@ public class ClassroomServiceImpl implements ClassroomService {
     @Override
     @Transactional(readOnly = true)
     public List<ClassroomResponse> getAllClassrooms() {
-        return classroomRepository.findAllActive()
-                .stream()
-                .map(this::toResponse)
+        
+        Map<Long, ClassroomRepository.ClassroomCounts> countsById = classroomRepository
+                .countSubjectsAndStudentsPerClassroom().stream()
+                .collect(Collectors.toMap(ClassroomRepository.ClassroomCounts::getClassroomId, c -> c));
+
+        return classroomRepository.findAllByIsDeletedFalse().stream()
+                .map(c -> {
+                    ClassroomRepository.ClassroomCounts counts = countsById.get(c.getClassroomId());
+                    return toResponse(c,
+                            counts != null ? (int) counts.getSubjectCount() : 0,
+                            counts != null ? (int) counts.getStudentCount() : 0);
+                })
                 .collect(Collectors.toList());
     }
 
@@ -141,11 +183,20 @@ public class ClassroomServiceImpl implements ClassroomService {
     }
 
     @Override
-    public List<ClassroomResponse> getClassroomsByLecturerId(Long lecturerId) {
+    @Transactional(readOnly = true)
+    public List<ClassroomSubjectResponse> getClassroomsByLecturerId(Long lecturerId) {
         return classroomSubjectRepository.findByLecturerId(lecturerId)
                 .stream()
-                .map(cs -> toResponse(cs.getClassroom()))
+                .map(this::toClassroomSubjectResponse)
                 .collect(Collectors.toList());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public ClassroomSubjectResponse getClassroomSubjectById(Long classroomSubjectId) {
+        ClassroomSubject cs = classroomSubjectRepository.findById(classroomSubjectId)
+                .orElseThrow(() -> new ResourceNotFoundException("Classroom-subject not found with id: " + classroomSubjectId));
+        return toClassroomSubjectResponse(cs);
     }
 
     @Override
@@ -167,69 +218,120 @@ public class ClassroomServiceImpl implements ClassroomService {
     }
 
     @Override
-    @Transactional
-    public ClassroomResponse assignTeacher(Long classroomId, AssignTeacherRequest request) {
-        log.info("Assigning teacher id: {} to classroom id: {}", request.getTeacherId(), classroomId);
-
-        Classroom classroom = classroomRepository.findByClassroomIdAndIsDeletedFalse(classroomId)
-                .orElseThrow(() -> new ResourceNotFoundException("Classroom not found with id: " + classroomId));
-
-        UserAccount teacher = userAccountRepository.findById(request.getTeacherId())
-                .orElseThrow(() -> new ResourceNotFoundException("Lecturer not found with id: " + request.getTeacherId()));
-
-        // Cập nhật lecturer trong bản ghi ClassroomSubject đầu tiên tìm được
-        List<ClassroomSubject> csList = classroomSubjectRepository.findByClassroomClassroomId(classroomId);
-        if (!csList.isEmpty()) {
-            ClassroomSubject cs = csList.get(0);
-            cs.setLecturer(teacher);
-            classroomSubjectRepository.save(cs);
-        }
-
-        return toResponse(classroom);
-    }
-
+    @Transactional(readOnly = true)
     public List<SubjectResponse> getSubjectsByLecturerId(Long lecturerId) {
         return classroomSubjectRepository.findByLecturerId(lecturerId)
                 .stream()
-                .map(cs -> SubjectResponse.builder()
-                        .subjectId(cs.getSubject().getSubjectId())
-                        .subjectCode(cs.getSubject().getSubjectCode())
-                        .subjectName(cs.getSubject().getSubjectName())
-                        .description(cs.getSubject().getDescription())
-                        .build())
+                .map(cs -> SubjectResponse.from(cs.getSubject()))
                 .distinct()
                 .collect(Collectors.toList());
     }
 
-    // ─── Mapper ──────────────────────────────────────────────────────────────
+    
 
     private ClassroomResponse toResponse(Classroom classroom) {
-        int studentCount = classroomSubjectStudentRepository.findAllByClassroomId(classroom.getClassroomId()).size();
-
-        // Lấy thông tin subject và lecturer từ ClassroomSubject
-        List<ClassroomSubject> csList = classroomSubjectRepository.findByClassroomClassroomId(classroom.getClassroomId());
         
-        ClassroomResponse.ClassroomResponseBuilder builder = ClassroomResponse.builder()
+        int subjectCount = (int) classroomSubjectRepository
+                .countByClassroomClassroomId(classroom.getClassroomId());
+        int studentCount = (int) classroomSubjectStudentRepository
+                .countAllByClassroomId(classroom.getClassroomId());
+        return toResponse(classroom, subjectCount, studentCount);
+    }
+
+    private ClassroomResponse toResponse(Classroom classroom, int subjectCount, int studentCount) {
+        return ClassroomResponse.builder()
                 .classroomId(classroom.getClassroomId())
                 .className(classroom.getClassName())
-                .semester(classroom.getSemester())
+                .semesterId(classroom.getSemester() != null ? classroom.getSemester().getSemesterId() : null)
+                .term(classroom.getTerm())
+                .academicYear(classroom.getAcademicYear())
+                .semesterLabel(classroom.semesterLabel())
                 .description(classroom.getDescription())
+                .status(classroom.getStatus())
+                .subjectCount(subjectCount)
                 .studentCount(studentCount)
                 .createdAt(classroom.getCreatedAt())
-                .updatedAt(classroom.getUpdatedAt());
+                .updatedAt(classroom.getUpdatedAt())
+                .build();
+    }
 
-        if (!csList.isEmpty()) {
-            ClassroomSubject cs = csList.get(0);
-            builder.subjectId(cs.getSubject().getSubjectId())
-                    .subjectCode(cs.getSubject().getSubjectCode())
-                    .subjectName(cs.getSubject().getSubjectName())
-                    .lecturerId(cs.getLecturer().getUserId())
-                    .lecturerEmail(cs.getLecturer().getEmail())
-                    .lecturerName(cs.getLecturer().getFirstName() + " " + cs.getLecturer().getLastName())
-                    .lecturerFirstName(cs.getLecturer().getFirstName())
-                    .lecturerLastName(cs.getLecturer().getLastName());
+    private ClassroomSubjectResponse toClassroomSubjectResponse(ClassroomSubject cs) {
+        Classroom classroom = cs.getClassroom();
+        com.fedu.fedu.entity.Subject subject = cs.getSubject();
+        com.fedu.fedu.entity.UserAccount lecturer = cs.getLecturer();
+
+        int studentCount = (int) classroomSubjectStudentRepository
+                .countAllByClassroomSubjectId(cs.getId());
+
+        String lecturerName = "";
+        if (lecturer != null) {
+            String last = lecturer.getLastName() != null ? lecturer.getLastName() : "";
+            String first = lecturer.getFirstName() != null ? lecturer.getFirstName() : "";
+            lecturerName = (last + " " + first).trim();
+            if (lecturerName.isEmpty()) {
+                lecturerName = lecturer.getEmail();
+            }
         }
 
-        return builder.build();
+        return ClassroomSubjectResponse.builder()
+                .classroomSubjectId(cs.getId())
+                .classroomId(classroom != null ? classroom.getClassroomId() : null)
+                .className(classroom != null ? classroom.getClassName() : null)
+                .subjectId(subject != null ? subject.getSubjectId() : null)
+                .subjectCode(subject != null ? subject.getSubjectCode() : null)
+                .subjectName(subject != null ? subject.getSubjectName() : null)
+                .lecturerId(lecturer != null ? lecturer.getUserId() : null)
+                .lecturerName(lecturerName)
+                .displayName(classroom != null && subject != null
+                        ? classroom.getClassName() + " - " + subject.getSubjectCode()
+                        : null)
+                .studentCount(studentCount)
+                .status(classroom != null ? classroom.getStatus() : null)
+                .term(classroom != null ? classroom.getTerm() : null)
+                .academicYear(classroom != null ? classroom.getAcademicYear() : null)
+                .semesterLabel(classroom != null ? classroom.semesterLabel() : null)
+                .build();
+    }
+
+    private void assertTeacherOwnsClassroom(Long classroomId) {
+        var auth = org.springframework.security.core.context.SecurityContextHolder
+                .getContext().getAuthentication();
+        if (auth == null) return; 
+        boolean isAdmin = auth.getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"));
+        if (isAdmin) return;
+
+        UserAccount actor = userAccountRepository.findByEmail(auth.getName())
+                .orElseThrow(() -> new org.springframework.security.access.AccessDeniedException("Unauthorized"));
+        if (!classroomSubjectRepository.existsByClassroomClassroomIdAndLecturerUserId(classroomId, actor.getUserId())) {
+            throw new org.springframework.security.access.AccessDeniedException("Bạn không giảng dạy lớp học này");
+        }
+    }
+
+    private enum SemesterRelation {
+        PAST, PRESENT, FUTURE
+    }
+
+    private com.fedu.fedu.entity.Semester resolveSemester(Long semesterId) {
+        if (semesterId == null) {
+            return null;
+        }
+        return semesterRepository.findById(semesterId)
+                .orElseThrow(() -> new com.fedu.fedu.exception.InvalidDataException(
+                        "Học kỳ đã chọn không tồn tại trên hệ thống."));
+    }
+
+    private SemesterRelation getSemesterRelation(com.fedu.fedu.entity.Semester sem) {
+        if (sem == null || sem.getStartDate() == null || sem.getEndDate() == null) {
+            return SemesterRelation.PRESENT;
+        }
+        java.time.LocalDate now = java.time.LocalDate.now();
+        if (now.isBefore(sem.getStartDate())) {
+            return SemesterRelation.FUTURE;
+        } else if (now.isAfter(sem.getEndDate())) {
+            return SemesterRelation.PAST;
+        } else {
+            return SemesterRelation.PRESENT;
+        }
     }
 }

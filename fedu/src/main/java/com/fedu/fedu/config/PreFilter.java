@@ -18,7 +18,7 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
-
+import com.fedu.fedu.service.TokenService;
 import java.io.IOException;
 
 import static org.springframework.http.HttpHeaders.AUTHORIZATION;
@@ -30,6 +30,7 @@ public class PreFilter extends OncePerRequestFilter {
 
     private final UserAccountService userService;
     private final JwtService jwtService;
+    private final TokenService tokenService;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, @NonNull HttpServletResponse response, @NonNull FilterChain filterChain) throws ServletException, IOException {
@@ -46,7 +47,14 @@ public class PreFilter extends OncePerRequestFilter {
             final String userName = jwtService.extractUsername(token, TokenType.ACCESS_TOKEN);
             if (StringUtils.isNotEmpty(userName) && SecurityContextHolder.getContext().getAuthentication() == null) {
                 UserDetails userDetails = userService.userDetailService().loadUserByUsername(userName);
-                if (jwtService.isValid(token, TokenType.ACCESS_TOKEN, userDetails)) {
+                if (!userDetails.isEnabled() || !userDetails.isAccountNonLocked()) {
+                    response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                    response.setContentType("application/json;charset=UTF-8");
+                    response.getWriter().write("{\"status\":401,\"message\":\"Tài khoản của bạn đã bị khóa hoặc ngừng hoạt động\"}");
+                    return;
+                }
+                if (jwtService.isValid(token, TokenType.ACCESS_TOKEN, userDetails)
+                        && tokenService.isAccessTokenActive(userName, token)) {
                     SecurityContext context = SecurityContextHolder.createEmptyContext();
                     UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());
                     authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
@@ -56,10 +64,10 @@ public class PreFilter extends OncePerRequestFilter {
             }
         } catch (Exception e) {
             log.warn("Invalid/expired access token: {}", e.getMessage());
-            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED); // 401
+            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED); 
             response.setContentType("application/json;charset=UTF-8");
             response.getWriter().write("{\"status\":401,\"message\":\"Token không hợp lệ hoặc đã hết hạn\"}");
-            return; // dừng, KHÔNG gọi doFilter
+            return; 
         }
 
         filterChain.doFilter(request, response);

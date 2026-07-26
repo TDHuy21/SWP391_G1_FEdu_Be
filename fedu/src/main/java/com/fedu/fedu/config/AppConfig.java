@@ -21,6 +21,8 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
+import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
+
 import static org.springframework.security.config.http.SessionCreationPolicy.STATELESS;
 
 @Configuration
@@ -46,7 +48,13 @@ public class AppConfig {
             "/auth/forgot-password",
             "/auth/reset-password",
             "/auth/change-password",
-            "/auth/refresh-token"
+            "/auth/refresh-token",
+            "/auth/reset-all-passwords",
+            "/auth/setup-admin",
+            "/public/about/**",
+            "/public/slots/**",
+            "/public/slots",
+            "/uploads/**"
     };
 
     @Bean
@@ -56,10 +64,19 @@ public class AppConfig {
                 .authorizeHttpRequests(authorizeRequests ->
                         authorizeRequests
                                 .requestMatchers(WHITE_LIST).permitAll()
+                                .requestMatchers(
+                                        "/admin/subjects/*/learning-paths/**",
+                                        "/admin/learning-paths/**",
+                                        "/admin/learning-nodes/**",
+                                        "/admin/node-edges/**",
+                                        "/admin/materials/**",
+                                        "/admin/tests/**",
+                                        "/admin/test-questions/**",
+                                        "/admin/exercises/**"
+                                ).hasAnyRole("ADMIN", "TEACHER")
                                 .requestMatchers("/admin/**").hasRole("ADMIN")
                                 .requestMatchers("/teacher/**").hasRole("TEACHER")
-                                .requestMatchers("/teacher-manage/**").hasRole("TEACHER")
-                                .requestMatchers("/student/sub-mentor/**").hasRole("SUB_MENTOR")
+                                .requestMatchers("/teacher-manage/**").hasAnyRole("TEACHER", "ADMIN")
                                 .requestMatchers("/student/**").hasRole("STUDENT")
                                 .anyRequest().authenticated()
                 )
@@ -107,6 +124,12 @@ public class AppConfig {
                         .allowedHeaders("*")
                         .exposedHeaders("x-refresh-token")
                         .allowCredentials(true);
+            }
+
+            @Override
+            public void addResourceHandlers(ResourceHandlerRegistry registry) {
+                registry.addResourceHandler("/uploads/**")
+                        .addResourceLocations("file:uploads/");
             }
         };
     }

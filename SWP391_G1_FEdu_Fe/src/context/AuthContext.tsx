@@ -3,6 +3,8 @@ import {
   useContext,
   useEffect,
   useState,
+  useCallback,
+  useMemo,
   ReactNode,
 } from 'react';
 import { User } from '../types/user';
@@ -43,9 +45,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(null);
       })
       .finally(() => setIsLoading(false));
+
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'accessToken') {
+        if (!e.newValue) {
+          setUser(null);
+          window.location.href = '/';
+        } else {
+          window.location.reload();
+        }
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+    };
   }, []);
 
-  const login = async (
+  const login = useCallback(async (
     accessToken: string,
     refreshToken: string,
     rememberMe: boolean
@@ -62,19 +80,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
-  const logout = (): void => {
+  const logout = useCallback((): void => {
     const refreshToken = tokenStorage.getRefreshToken();
     if (refreshToken) {
-      // Fire-and-forget, không đợi BE
+      
       authService.logout(refreshToken).catch(() => {});
     }
     tokenStorage.clear();
     setUser(null);
-  };
+  }, []);
 
-  const refetchUser = async (): Promise<void> => {
+  const refetchUser = useCallback(async (): Promise<void> => {
     if (!tokenStorage.getAccessToken()) return;
     try {
       const userData = await authService.getMe();
@@ -83,16 +101,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.warn('Refetch user failed:', err);
       logout();
     }
-  };
+  }, [logout]);
 
-  const value: AuthContextValue = {
+  const value: AuthContextValue = useMemo(() => ({
     user,
     isAuthenticated: !!user,
     isLoading,
     login,
     logout,
     refetchUser,
-  };
+  }), [user, isLoading, login, logout, refetchUser]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

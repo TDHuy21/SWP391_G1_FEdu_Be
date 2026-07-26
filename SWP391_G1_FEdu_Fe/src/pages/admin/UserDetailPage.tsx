@@ -1,4 +1,4 @@
-import { ArrowLeft, Mail, Phone, MapPin, BookOpen, GraduationCap, Loader2, AlertCircle } from "lucide-react";
+import { ArrowLeft, Mail, Phone, BookOpen, GraduationCap, Loader2, AlertCircle } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { adminService, AdminUserResponse } from "../../services/admin.service";
@@ -11,6 +11,9 @@ interface Course {
   status: "Đang học" | "Đã hoàn thành" | "Đang dạy";
   progress?: number;
   students?: number;
+  
+  classroomId?: number;
+  classroomSubjectId?: number;
 }
 
 interface AdminUserDetail {
@@ -23,10 +26,11 @@ interface AdminUserDetail {
   role: "Học viên" | "Giảng viên";
   status: "active" | "inactive";
   avatar: string;
+  avatarUrl?: string;
 }
 
 interface UserDetailPageProps {
-  onBack?: () => void; // Made optional since we can use navigate(-1) by default
+  onBack?: () => void; 
 }
 
 function mapBeUserToAdminDetail(u: AdminUserResponse): AdminUserDetail {
@@ -49,10 +53,11 @@ function mapBeUserToAdminDetail(u: AdminUserResponse): AdminUserDetail {
     role: roleLabel as any,
     status: u.status === "ACTIVE" ? "active" : "inactive",
     avatar: initials,
+    avatarUrl: u.avatarUrl,
   };
 }
 
-// Removed mock courses since we fetch real data
+
 
 export function UserDetailPage({ onBack }: UserDetailPageProps) {
   const navigate = useNavigate();
@@ -72,24 +77,30 @@ export function UserDetailPage({ onBack }: UserDetailPageProps) {
         const userDetail = mapBeUserToAdminDetail(data);
         setUser(userDetail);
 
-        // Fetch courses based on role
+        
         if (userDetail.role === "Học viên") {
-          const studentClasses = await classroomService.getByStudent(userDetail.id);
-          setCourses(studentClasses.map(c => ({
-            id: String(c.classroomId),
-            code: c.subjectCode,
-            title: `${c.subjectName} (${c.className})`,
+          
+          const studentClassSubjects = await classroomService.getClassroomSubjectsByStudent(userDetail.id);
+          setCourses(studentClassSubjects.map(cs => ({
+            id: String(cs.classroomSubjectId),
+            code: cs.subjectCode || "",
+            title: cs.displayName,
             status: "Đang học",
             progress: 0,
+            classroomId: cs.classroomId,
+            classroomSubjectId: cs.classroomSubjectId,
           })));
         } else {
-          const teacherClasses = await classroomService.getByTeacher(userDetail.id);
-          setCourses(teacherClasses.map(c => ({
-            id: String(c.classroomId),
-            code: c.subjectCode,
-            title: `${c.subjectName} (${c.className})`,
+          
+          const teacherClassSubjects = await classroomService.getClassroomSubjectsByLecturer(userDetail.id);
+          setCourses(teacherClassSubjects.map(cs => ({
+            id: String(cs.classroomSubjectId),
+            code: cs.subjectCode || "",
+            title: cs.displayName,
             status: "Đang dạy",
-            students: c.studentCount
+            students: cs.studentCount,
+            classroomId: cs.classroomId,
+            classroomSubjectId: cs.classroomSubjectId,
           })));
         }
       } catch (err: unknown) {
@@ -107,152 +118,169 @@ export function UserDetailPage({ onBack }: UserDetailPageProps) {
   };
 
   if (loading) return (
-    <div className="flex items-center justify-center py-20">
-      <Loader2 className="w-8 h-8 animate-spin" style={{ color: "#4338ca" }} />
-      <span style={{ marginLeft: "0.75rem", color: "#6b7280" }}>Đang tải...</span>
+    <div className="flex items-center justify-center py-20 text-muted-foreground">
+      <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      <span className="ml-3 text-sm">Đang tải...</span>
     </div>
   );
 
   if (error || !user) return (
-    <div className="flex flex-col items-center justify-center py-20 gap-3">
-      <AlertCircle className="w-10 h-10" style={{ color: "#ef4444" }} />
-      <p style={{ color: "#374151" }}>{error || "Không tìm thấy người dùng"}</p>
-      <button onClick={handleBack} className="px-4 py-2 rounded-lg text-white text-sm" style={{ background: "#4338ca" }}>Quay lại</button>
+    <div className="flex flex-col items-center justify-center py-20 gap-3 text-foreground">
+      <AlertCircle className="w-10 h-10 text-destructive" />
+      <p>{error || "Không tìm thấy người dùng"}</p>
+      <button 
+        onClick={handleBack} 
+        className="px-4 py-2 bg-primary text-primary-foreground text-sm font-semibold rounded-lg hover:bg-primary/90 transition-colors border-none cursor-pointer"
+      >
+        Quay lại
+      </button>
     </div>
   );
 
   const isStudent = user.role === "Học viên";
+  const isTeacher = user.role === "Giảng viên";
+  const isAdmin = !isStudent && !isTeacher;
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
+    <div className="space-y-6 text-foreground">
+      {}
       <div className="flex items-center gap-4">
-        <button onClick={handleBack} className="p-2 rounded-lg hover:bg-gray-100 transition-colors">
-          <ArrowLeft className="w-5 h-5" style={{ color: "#6b7280" }} />
+        <button onClick={handleBack} className="p-2 rounded-lg hover:bg-muted transition-colors border-none bg-transparent cursor-pointer">
+          <ArrowLeft className="w-5 h-5 text-muted-foreground" />
         </button>
-        <h1 style={{ fontSize: "1.5rem", fontWeight: 700, color: "#111827" }}>
-          {isStudent ? "Thông tin Học viên" : "Thông tin Giảng viên"}
+        <h1 className="text-2xl font-bold text-foreground">
+          {isStudent ? "Thông tin Học viên" : isTeacher ? "Thông tin Giảng viên" : "Thông tin Quản trị viên"}
         </h1>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left Column */}
-        <div className="lg:col-span-1 space-y-6">
-          <div className="rounded-xl p-6 text-center" style={{ background: "linear-gradient(135deg, #4338ca, #7c3aed)" }}>
-            <div className="w-24 h-24 rounded-full mx-auto mb-4 flex items-center justify-center" style={{ backgroundColor: "rgba(255,255,255,0.2)", border: "3px solid white" }}>
-              <span className="text-white text-3xl font-bold">{user.avatar}</span>
+      <div className={isAdmin ? "max-w-md mx-auto" : "grid grid-cols-1 lg:grid-cols-3 gap-6"}>
+        {}
+        <div className={isAdmin ? "space-y-6 w-full" : "lg:col-span-1 space-y-6"}>
+          <div className="p-6 text-center bg-card border border-border rounded-xl">
+            <div className="w-24 h-24 rounded-full mx-auto mb-4 flex items-center justify-center overflow-hidden bg-muted border-2 border-border shadow-sm">
+              {user.avatarUrl ? (
+                <img src={user.avatarUrl} alt={user.name} className="w-full h-full object-cover" />
+              ) : (
+                <span className="text-foreground text-3xl font-bold">{user.avatar}</span>
+              )}
             </div>
-            <h2 className="text-white mb-4" style={{ fontSize: "1.25rem", fontWeight: 700 }}>{user.name}</h2>
-            <div className="flex items-center justify-center gap-4 mb-4">
-              <div className="text-center">
-                <div className="text-white text-2xl font-bold">{courses.length}</div>
-                <div className="text-indigo-200 text-xs">Khóa học</div>
-              </div>
-              <div className="w-px h-10" style={{ backgroundColor: "rgba(255,255,255,0.3)" }} />
-              <div className="text-center">
-                <div className="text-white text-2xl font-bold">
-                  {isStudent ? "0%" : courses.reduce((sum, c) => sum + (c.students || 0), 0)}
+            <h2 className="text-foreground mb-4 text-xl font-bold">{user.name}</h2>
+            {!isAdmin && (
+              <div className="flex items-center justify-center gap-4 mb-4">
+                <div className="text-center">
+                  <div className="text-foreground text-2xl font-bold">{courses.length}</div>
+                  <div className="text-slate-300 text-xs">Môn học</div>
                 </div>
-                <div className="text-indigo-200 text-xs">{isStudent ? "Hoàn thành" : "Học viên"}</div>
-              </div>
-            </div>
-          </div>
-
-          <div className="rounded-xl p-6" style={{ backgroundColor: "white", border: "1px solid #e5e7eb", boxShadow: "0 1px 3px rgba(0,0,0,0.05)" }}>
-            <h3 style={{ fontSize: "1rem", fontWeight: 600, color: "#111827", marginBottom: "1rem" }}>Thông tin cá nhân</h3>
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <span style={{ fontSize: "0.875rem", color: "#6b7280" }}>Giới tính</span>
-                <span style={{ fontSize: "0.875rem", color: "#111827", fontWeight: 600 }}>{user.gender === "Male" ? "Nam" : user.gender === "Female" ? "Nữ" : "Khác"}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span style={{ fontSize: "0.875rem", color: "#6b7280" }}>Ngày sinh</span>
-                <span style={{ fontSize: "0.875rem", color: "#111827", fontWeight: 600 }}>{user.dateOfBirth === "—" ? "—" : new Date(user.dateOfBirth).toLocaleDateString("vi-VN")}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span style={{ fontSize: "0.875rem", color: "#6b7280" }}>Vai trò</span>
-                <span className="px-2.5 py-1 rounded-full text-xs" style={{ backgroundColor: isStudent ? "#ecfdf5" : "#fdf2f8", color: isStudent ? "#059669" : "#db2777", fontWeight: 600 }}>{user.role}</span>
-              </div>
-            </div>
-            <div className="border-t my-4" style={{ borderColor: "#e5e7eb" }} />
-            <div className="space-y-3">
-              <div className="flex items-start gap-3">
-                <Mail className="w-4 h-4 shrink-0 mt-0.5" style={{ color: "#6b7280" }} />
-                <div className="flex-1 min-w-0">
-                  <div style={{ fontSize: "0.75rem", color: "#6b7280", marginBottom: "0.125rem" }}>Email</div>
-                  <div style={{ fontSize: "0.875rem", color: "#111827", fontWeight: 500, wordBreak: "break-all" }}>{user.email}</div>
-                </div>
-              </div>
-              <div className="flex items-start gap-3">
-                <Phone className="w-4 h-4 shrink-0 mt-0.5" style={{ color: "#6b7280" }} />
-                <div className="flex-1 min-w-0">
-                  <div style={{ fontSize: "0.75rem", color: "#6b7280", marginBottom: "0.125rem" }}>Số điện thoại</div>
-                  <div style={{ fontSize: "0.875rem", color: "#111827", fontWeight: 500 }}>{user.phone}</div>
-                </div>
-              </div>
-              <div className="flex items-start gap-3">
-                <MapPin className="w-4 h-4 shrink-0 mt-0.5" style={{ color: "#6b7280" }} />
-                <div className="flex-1 min-w-0">
-                  <div style={{ fontSize: "0.75rem", color: "#6b7280", marginBottom: "0.125rem" }}>Địa chỉ</div>
-                  <div style={{ fontSize: "0.875rem", color: "#111827", fontWeight: 500 }}>Hà Nội, Việt Nam</div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Right Column */}
-        <div className="lg:col-span-2">
-          <div className="rounded-xl p-6" style={{ backgroundColor: "white", border: "1px solid #e5e7eb", boxShadow: "0 1px 3px rgba(0,0,0,0.05)" }}>
-            <div className="flex items-center gap-2 mb-6">
-              {isStudent ? <BookOpen className="w-5 h-5" style={{ color: "#4338ca" }} /> : <GraduationCap className="w-5 h-5" style={{ color: "#4338ca" }} />}
-              <h3 style={{ fontSize: "1.125rem", fontWeight: 600, color: "#111827" }}>
-                {isStudent ? "Khóa học đã/đang học" : "Lớp học đang giảng dạy"}
-              </h3>
-            </div>
-            <div className="space-y-4">
-              {courses.map((course) => (
-                <div
-                  key={course.id}
-                  className="p-5 rounded-xl hover:shadow-md transition-shadow cursor-pointer"
-                  style={{ border: "1px solid #e5e7eb" }}
-                  onClick={() => navigate(`/admin/courses/${course.id}`)}
-                >
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="px-2.5 py-0.5 rounded text-xs" style={{ backgroundColor: "#eef2ff", color: "#4338ca", fontWeight: 700 }}>{course.code}</span>
-                        <span className="px-2.5 py-0.5 rounded-full text-xs" style={{
-                          backgroundColor: course.status === "Đã hoàn thành" ? "#ecfdf5" : course.status === "Đang học" ? "#fef3c7" : "#eef2ff",
-                          color: course.status === "Đã hoàn thành" ? "#059669" : course.status === "Đang học" ? "#d97706" : "#4338ca",
-                          fontWeight: 600,
-                        }}>{course.status}</span>
-                      </div>
-                      <h4 style={{ fontSize: "1rem", fontWeight: 600, color: "#111827" }}>{course.title}</h4>
-                    </div>
+                <div className="w-px h-10 bg-border" />
+                <div className="text-center">
+                  <div className="text-foreground text-2xl font-bold">
+                    {isStudent ? "0%" : courses.reduce((sum, c) => sum + (c.students || 0), 0)}
                   </div>
-                  {isStudent && course.progress !== undefined && (
-                    <div>
-                      <div className="flex items-center justify-between mb-2">
-                        <span style={{ fontSize: "0.8125rem", color: "#6b7280" }}>Tiến độ học tập</span>
-                        <span style={{ fontSize: "0.8125rem", color: "#111827", fontWeight: 600 }}>{course.progress}%</span>
-                      </div>
-                      <div className="w-full h-2 rounded-full overflow-hidden" style={{ backgroundColor: "#e5e7eb" }}>
-                        <div className="h-full rounded-full transition-all" style={{ width: `${course.progress}%`, background: "linear-gradient(135deg, #4338ca, #7c3aed)" }} />
-                      </div>
-                    </div>
-                  )}
-                  {!isStudent && course.students !== undefined && (
-                    <div className="flex items-center gap-2">
-                      <GraduationCap className="w-4 h-4" style={{ color: "#6b7280" }} />
-                      <span style={{ fontSize: "0.875rem", color: "#6b7280" }}>{course.students} học viên</span>
-                    </div>
-                  )}
+                  <div className="text-slate-300 text-xs">{isStudent ? "Hoàn thành" : "Học viên"}</div>
                 </div>
-              ))}
+              </div>
+            )}
+          </div>
+
+          <div className="p-6 bg-card border border-border rounded-xl">
+            <h3 className="text-sm font-bold text-foreground mb-4">Thông tin cá nhân</h3>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">Giới tính</span>
+                <span className="text-sm text-foreground font-semibold">{user.gender === "Male" ? "Nam" : user.gender === "Female" ? "Nữ" : "Khác"}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">Ngày sinh</span>
+                <span className="text-sm text-foreground font-semibold">{user.dateOfBirth === "—" ? "—" : new Date(user.dateOfBirth).toLocaleDateString("vi-VN")}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">Vai trò</span>
+                <span className={`px-2.5 py-1 text-xs font-semibold rounded-md ${
+                  isStudent 
+                    ? "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300" 
+                    : "bg-pink-100 dark:bg-pink-900/30 text-pink-700 dark:text-pink-300"
+                }`}>{user.role}</span>
+              </div>
+            </div>
+            <div className="border-t my-4 border-border" />
+            <div className="space-y-3">
+              <div className="flex items-start gap-3">
+                <Mail className="w-4 h-4 shrink-0 mt-0.5 text-muted-foreground" />
+                <div className="flex-1 min-w-0">
+                  <div className="text-[10px] text-muted-foreground mb-0.5">Email</div>
+                  <div className="text-sm text-foreground font-medium wordBreak: break-all">{user.email}</div>
+                </div>
+              </div>
+              <div className="flex items-start gap-3">
+                <Phone className="w-4 h-4 shrink-0 mt-0.5 text-muted-foreground" />
+                <div className="flex-1 min-w-0">
+                  <div className="text-[10px] text-muted-foreground mb-0.5">Số điện thoại</div>
+                  <div className="text-sm text-foreground font-medium">{user.phone}</div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
+
+        {}
+        {!isAdmin && (
+          <div className="lg:col-span-2">
+            <div className="p-6 bg-card border border-border rounded-xl">
+              <div className="flex items-center gap-2 mb-6">
+                {isStudent ? <BookOpen className="w-5 h-5 text-foreground" /> : <GraduationCap className="w-5 h-5 text-foreground" />}
+                <h3 className="text-lg font-semibold text-foreground">
+                  {isStudent ? "Môn học đã/đang học" : "Lớp học đang giảng dạy"}
+                </h3>
+              </div>
+              <div className="space-y-4">
+                {courses.map((course) => (
+                  <div
+                    key={course.id}
+                    className="p-5 bg-card hover:bg-muted/40 border border-border rounded-xl transition-colors cursor-pointer"
+                    onClick={() =>
+                      course.classroomSubjectId != null && course.classroomId != null
+                        ? navigate(`/admin/classes/${course.classroomId}/subjects/${course.classroomSubjectId}`)
+                        : navigate(`/admin/subjects/${course.id}`)
+                    }
+                  >
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="px-2.5 py-0.5 text-xs font-bold bg-muted text-muted-foreground rounded-md">{course.code}</span>
+                          <span className={`px-2.5 py-0.5 text-xs font-semibold rounded-md ${
+                            course.status === "Đã hoàn thành" 
+                              ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300" 
+                              : course.status === "Đang học" 
+                              ? "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300" 
+                              : "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300"
+                          }`}>{course.status}</span>
+                        </div>
+                        <h4 className="text-sm font-semibold text-foreground mt-2">{course.title}</h4>
+                      </div>
+                    </div>
+                    {isStudent && course.progress !== undefined && (
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-xs text-muted-foreground">Tiến độ học tập</span>
+                          <span className="text-xs text-foreground font-semibold">{course.progress}%</span>
+                        </div>
+                        <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
+                          <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${course.progress}%` }} />
+                        </div>
+                      </div>
+                    )}
+                    {!isStudent && course.students !== undefined && (
+                      <div className="flex items-center gap-2">
+                        <GraduationCap className="w-4 h-4 text-muted-foreground" />
+                        <span className="text-xs text-muted-foreground">{course.students} học viên</span>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

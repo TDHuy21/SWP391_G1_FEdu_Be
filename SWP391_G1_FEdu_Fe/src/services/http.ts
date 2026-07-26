@@ -2,7 +2,7 @@ import type { AxiosResponse } from 'axios';
 import { apiClient } from './api.client';
 import { extractErrorMessage } from '../utils/apiError';
 
-// BE luôn trả ResponseData: { status, message, data }
+
 async function unwrap<T>(call: Promise<AxiosResponse>): Promise<T> {
   let body: { status?: number; message?: string; data?: T };
   try {
@@ -18,7 +18,8 @@ async function unwrap<T>(call: Promise<AxiosResponse>): Promise<T> {
 
 export const http = {
   get: <T>(path: string) => unwrap<T>(apiClient.get(path)),
-  post: <T>(path: string, body?: unknown) => unwrap<T>(apiClient.post(path, body)),
+  post: <T>(path: string, body?: unknown, headers?: Record<string, string>) => 
+    unwrap<T>(apiClient.post(path, body, headers ? { headers } : undefined)),
   put: <T>(path: string, body?: unknown) => unwrap<T>(apiClient.put(path, body)),
   patch: <T>(path: string, body?: unknown) => unwrap<T>(apiClient.patch(path, body)),
   delete: <T>(path: string, body?: unknown) => unwrap<T>(apiClient.delete(path, { data: body })),

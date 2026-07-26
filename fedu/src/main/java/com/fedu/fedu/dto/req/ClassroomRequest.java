@@ -1,25 +1,22 @@
 package com.fedu.fedu.dto.req;
 
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
 import lombok.Builder;
 import lombok.Data;
 
+/**
+ * Thông tin lớp học (tạo/sửa). Trạng thái vòng đời KHÔNG nằm ở đây —
+ * chỉ đổi qua PATCH /classrooms/{id}/status (admin).
+ */
 @Data
 @Builder
 public class ClassroomRequest {
 
-    @NotNull(message = "Subject ID is required")
-    private Long subjectId;
-
     @NotBlank(message = "Class name is required")
     private String className;
 
-    private String semester;
+    /** "Kì học": id của học kỳ đã cấu hình (bảng semesters). */
+    private Long semesterId;
 
     private String description;
-
-    // lecturerId is taken from the authenticated user (TEACHER role)
-    // but can be overridden by ADMIN
-    private Long lecturerId;
 }

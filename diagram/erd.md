@@ -117,16 +117,18 @@ entity "classroom_subject_students" as classroom_subject_students {
   --
   * classroom_subject_id : BIGINT [FK]
   * student_id : BIGINT [FK]
+  current_level : INT
+  is_submentor : BOOLEAN
   joined_at : TIMESTAMP
   created_at : TIMESTAMP
   updated_at : TIMESTAMP
 }
 
-entity "classroom_sub_mentor" as classroom_sub_mentor {
+entity "sub_mentor_student_assignment" as sub_mentor_student_assignment {
   * id : BIGSERIAL [PK]
   --
-  * classroom_subject_id : BIGINT [FK]
-  * sub_mentor_id : BIGINT [FK]
+  * sub_mentor_css_id : BIGINT [FK]
+  * student_css_id : BIGINT [FK]
   assigned_at : TIMESTAMP
   created_at : TIMESTAMP
   updated_at : TIMESTAMP
@@ -205,6 +207,33 @@ entity "tests" as tests {
   description : TEXT
   duration_minutes : INT
   passing_percentage : DECIMAL(5,2)
+  test_kind : VARCHAR(20)
+  is_deleted : BOOLEAN
+  created_at : TIMESTAMP
+  updated_at : TIMESTAMP
+}
+
+entity "test_assignments" as test_assignments {
+  * assignment_id : BIGSERIAL [PK]
+  --
+  * test_id : BIGINT [FK]
+  * node_id : BIGINT [FK]
+  * classroom_subject_id : BIGINT [FK]
+  * assigned_by : BIGINT [FK]
+  status : VARCHAR(20)
+  close_at : TIMESTAMP
+  is_deleted : BOOLEAN
+  created_at : TIMESTAMP
+  updated_at : TIMESTAMP
+}
+
+entity "test_assignment_students" as test_assignment_students {
+  * id : BIGSERIAL [PK]
+  --
+  * assignment_id : BIGINT [FK]
+  * classroom_subject_student_id : BIGINT [FK]
+  status : VARCHAR(20)
+  attempt_id : BIGINT [FK]
   is_deleted : BOOLEAN
   created_at : TIMESTAMP
   updated_at : TIMESTAMP
@@ -329,24 +358,11 @@ entity "node_reviews" as node_reviews {
 entity "support_tickets" as support_tickets {
   * ticket_id : BIGSERIAL [PK]
   --
-  * classroom_subject_id : BIGINT [FK]
-  * created_by : BIGINT [FK]
-  assigned_to : BIGINT [FK]
-  * title : VARCHAR(255)
-  * description : TEXT
-  ticket_status : e_ticket_status
-  ticket_level : e_ticket_level
+  * classroom_subject_student_id : BIGINT [FK]
+  * message_student : TEXT
+  message_response : TEXT
+  * status : VARCHAR(20)
   is_deleted : BOOLEAN
-  created_at : TIMESTAMP
-  updated_at : TIMESTAMP
-}
-
-entity "ticket_comments" as ticket_comments {
-  * comment_id : BIGSERIAL [PK]
-  --
-  * ticket_id : BIGINT [FK]
-  * user_id : BIGINT [FK]
-  * content : TEXT
   created_at : TIMESTAMP
   updated_at : TIMESTAMP
 }
@@ -363,8 +379,9 @@ subjects ||--o{ classroom_subjects
 user_account ||--o{ classroom_subjects
 classroom_subjects ||--o{ classroom_subject_students
 user_account ||--o{ classroom_subject_students
-classroom_subjects ||--o{ classroom_sub_mentor
-user_account ||--o{ classroom_sub_mentor
+classroom_subject_students ||--o{ sub_mentor_student_assignment : "sub_mentor_css"
+classroom_subject_students ||--o{ sub_mentor_student_assignment : "student_css"
+classroom_subject_students ||--o{ support_tickets
 subjects ||--o{ learning_paths
 classrooms ||--o{ learning_paths
 user_account ||--o{ learning_paths
@@ -376,6 +393,13 @@ node_materials ||--o{ files
 learning_nodes ||--o{ tests
 tests ||--o{ test_questions
 test_questions ||--o{ test_answers
+tests ||--o{ test_assignments
+learning_nodes ||--o{ test_assignments
+classroom_subjects ||--o{ test_assignments
+user_account ||--o{ test_assignments : "assigned_by"
+test_assignments ||--o{ test_assignment_students
+classroom_subject_students ||--o{ test_assignment_students
+student_test_attempts ||--o{ test_assignment_students
 tests ||--o{ student_test_attempts
 user_account ||--o{ student_test_attempts
 student_test_attempts ||--o{ student_test_responses
@@ -395,11 +419,6 @@ node_questions ||--o{ question_answers
 user_account ||--o{ question_answers
 learning_nodes ||--o{ node_reviews
 user_account ||--o{ node_reviews
-classroom_subjects ||--o{ support_tickets
-user_account ||--o{ support_tickets
-user_account ||--o{ support_tickets
-support_tickets ||--o{ ticket_comments
-user_account ||--o{ ticket_comments
 
 @enduml
 ```
@@ -431,7 +450,7 @@ user_account ||--o{ ticket_comments
 * **`files`**: Slide/PDF document attachments for student downloads.
 
 ### 4. Evaluation & Tracking Module
-* **`tests`**: Automated quizzes tied to learning milestones.
+* **`tests`**: Automated quizzes tied to learning milestones. `test_kind` (`NORMAL` | `POP_QUIZ`) discriminates ad-hoc pop-quiz tests, which are blocked from generic student test endpoints and only reachable through the pop-quiz assignment flow.
 * **`test_questions`**: Questions comprising a quiz (supports multiple-choice, essay, etc.).
 * **`test_answers`**: Correct and incorrect options for the questions.
 * **`student_test_attempts`**: Student attempts on a test, tracking time and score.
@@ -439,10 +458,12 @@ user_account ||--o{ ticket_comments
 * **`student_selected_answers`**: Many-to-many relationship supporting multiple selected answers.
 * **`student_node_progress`**: Tracks path completion status (`LOCKED`, `COMPLETED`, etc.) for student dashboards.
 * **`submissions`**: Homework/hand-in assignments uploaded by students, graded by teachers/sub-mentors.
+* **`test_assignments`**: An ad-hoc pop quiz a teacher assigns during an `ON_CLASS` session, scoped to one learning node and one classroom-subject; `status` (`OPEN`/`CLOSED`) and optional `close_at` gate whether students can still start it.
+* **`test_assignment_students`**: Per-student targeting and progress for a `test_assignments` row (`PENDING`/`IN_PROGRESS`/`SUBMITTED`/`EXPIRED`), linking to the student's own `student_test_attempts` row once started.
 
 ### 5. Interaction & Q&A Module
 * **`node_questions`**: Discussions or questions posted by students regarding a specific lesson.
 * **`question_answers`**: Official answers written by the teacher.
 * **`node_reviews`**: Ratings (1 to 5 stars) and qualitative feedback from students.
-* **`support_tickets`**: Ticketing system for help requests, triaged to `SUB_MENTOR` first, then escalated to `LECTURER` if needed.
-* **`ticket_comments`**: Discussion threads between students and support staff inside a ticket.
+* **`support_tickets`**: Peer-mentoring support tickets. Student sends a question (NONE), sub-mentor responds (DONE) or escalates to lecturer (SEND), lecturer resolves (DONE).
+* **`sub_mentor_student_assignment`**: Maps a sub-mentor CSS to student CSSes in the same class-subject for peer mentoring.

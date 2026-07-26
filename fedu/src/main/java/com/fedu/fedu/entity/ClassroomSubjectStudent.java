@@ -32,4 +32,13 @@ public class ClassroomSubjectStudent extends AbstractEntity<Long> {
     @Column(name = "joined_at", nullable = false, updatable = false)
     @CreationTimestamp
     private LocalDateTime joinedAt;
+
+    
+    @Column(name = "current_level")
+    private Integer currentLevel;
+
+    
+    @Builder.Default
+    @Column(name = "is_submentor", nullable = false)
+    private Boolean isSubmentor = false;
 }

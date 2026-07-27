@@ -261,10 +261,12 @@ public class StudentTestServiceImpl implements StudentTestService {
                     .build();
         }
 
-        boolean passed = test.getPassingPercentage() != null
-                && finalPercentage.compareTo(test.getPassingPercentage()) >= 0;
-
         LearningNode node = test.getLearningNode();
+        BigDecimal passThreshold = node.getTestKind() == NodeTestKind.GATE && node.getGateUpMin() != null
+                ? node.getGateUpMin()
+                : test.getPassingPercentage();
+        boolean passed = passThreshold != null && finalPercentage.compareTo(passThreshold) >= 0;
+
         ClassroomSubject cs = node.getLearningPath().getClassroomSubject();
         
         Integer levelBefore = currentLevelOf(cs, studentId);

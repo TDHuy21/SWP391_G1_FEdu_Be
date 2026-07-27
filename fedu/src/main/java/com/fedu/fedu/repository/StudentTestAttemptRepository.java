@@ -19,7 +19,10 @@ public interface StudentTestAttemptRepository extends JpaRepository<StudentTestA
            "AND a.test.learningNode.nodeId IN :nodeIds " +
            "AND a.test.isDeleted = false " +
            "AND a.status = com.fedu.fedu.utils.enums.AttemptStatus.SUBMITTED " +
-           "AND a.score >= COALESCE(a.test.passingPercentage, 0)")
+           "AND a.score >= COALESCE(" +
+           "    CASE WHEN a.test.learningNode.testKind = com.fedu.fedu.utils.enums.NodeTestKind.GATE " +
+           "         THEN a.test.learningNode.gateUpMin END, " +
+           "    a.test.passingPercentage, 0)")
     int countCompletedTestsByStudentAndNodeIds(
             @org.springframework.data.repository.query.Param("studentId") Long studentId,
             @org.springframework.data.repository.query.Param("nodeIds") java.util.Collection<Long> nodeIds);

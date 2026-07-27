@@ -157,7 +157,7 @@ public class StudentTestServiceImpl implements StudentTestService {
 
     @Override
     @Transactional
-    public StudentTestAttempt startTestAttempt(Long testId, Long studentId) {
+    public AttemptStartResponse startTestAttempt(Long testId, Long studentId) {
         com.fedu.fedu.entity.Test test = testRepository.findById(testId)
                 .orElseThrow(() -> new ResourceNotFoundException("Test not found with id: " + testId));
 
@@ -195,7 +195,36 @@ public class StudentTestServiceImpl implements StudentTestService {
                 .status(com.fedu.fedu.utils.enums.AttemptStatus.IN_PROGRESS)
                 .build();
 
-        return studentTestAttemptRepository.save(attempt);
+        attempt = studentTestAttemptRepository.save(attempt);
+
+        return AttemptStartResponse.builder()
+                .attemptId(attempt.getAttemptId())
+                .startedAt(attempt.getStartedAt())
+                .durationMinutes(test.getDurationMinutes())
+                .remainingSeconds(remainingSecondsFor(test, attempt))
+                .status(attempt.getStatus() != null ? attempt.getStatus().name() : null)
+                .tabOutCount(attempt.getTabOutCount())
+                .build();
+    }
+
+    /**
+     * Thời gian còn lại của lượt làm bài: hết hạn theo thời lượng đề tính từ lúc bắt đầu,
+     * và không bao giờ vượt quá thời điểm đóng đề (releaseEndsAt) nếu giáo viên có đặt.
+     * Trả về null khi đề không giới hạn thời gian — client sẽ không hiện đồng hồ đếm ngược.
+     */
+    private Long remainingSecondsFor(com.fedu.fedu.entity.Test test, StudentTestAttempt attempt) {
+        LocalDateTime deadline = null;
+        if (test.getDurationMinutes() != null && attempt.getStartedAt() != null) {
+            deadline = attempt.getStartedAt().plusMinutes(test.getDurationMinutes());
+        }
+        if (test.getReleaseEndsAt() != null
+                && (deadline == null || test.getReleaseEndsAt().isBefore(deadline))) {
+            deadline = test.getReleaseEndsAt();
+        }
+        if (deadline == null) {
+            return null;
+        }
+        return Math.max(0L, java.time.Duration.between(LocalDateTime.now(), deadline).getSeconds());
     }
 
     @Override

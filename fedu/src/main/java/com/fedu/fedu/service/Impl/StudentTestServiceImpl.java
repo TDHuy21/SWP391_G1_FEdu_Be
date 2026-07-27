@@ -804,8 +804,23 @@ public class StudentTestServiceImpl implements StudentTestService {
                     .findByStudentUserIdAndLearningPathPathId(studentId, pathId);
             if (NodeRoutingUtils.stagesWithChosenFreeChoice(all).contains(target.getStageOrder())) return;
         }
+        // Không mở node theo mức nếu chặng đó học sinh đã hoàn thành ở mức khác — nhất quán với
+        // recompute (StudentProgressServiceImpl) và reopenBranchNodesForLevel. Thiếu guard này,
+        // hoàn thành một node (vd. buổi ON_CLASS) sẽ mở lại nhánh mức hiện tại ở chặng vốn đã qua
+        // ở mức cũ, khiến học sinh học lại chặng đã xong.
+        if (stageClearedAtOtherLevel(studentId, target, pathId)) return;
         if (!checkIncomingPrerequisites(studentId, target, pathId)) return;
         openNode(studentId, target, pathId);
+    }
+
+    /** Node theo mức mà chặng của nó học sinh đã hoàn thành ở một mức khác. */
+    private boolean stageClearedAtOtherLevel(Long studentId, LearningNode target, Long pathId) {
+        if (target.getLevel() == null) return false;
+        Integer level = currentLevelOf(target.getLearningPath().getClassroomSubject(), studentId);
+        List<StudentNodeProgress> list = studentNodeProgressRepository
+                .findByStudentUserIdAndLearningPathPathId(studentId, pathId);
+        Set<Integer> cleared = NodeRoutingUtils.stagesClearedAtOtherLevel(list, level);
+        return NodeRoutingUtils.alreadyClearedAtOtherLevel(target, cleared);
     }
 
     private boolean matchesStudentLevel(Long studentId, LearningNode node) {

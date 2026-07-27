@@ -118,6 +118,32 @@ public class StudentProgressServiceImpl implements StudentProgressService {
             }
         }
 
+        // Chốt chặn: khóa lại node theo mức đang OPEN/IN_PROGRESS nhưng chặng của nó học sinh đã
+        // hoàn thành ở mức khác. Đây là các node từng bị mở sai (trước khi guard ở
+        // openMainTargetIfEligible được thêm); recompute chỉ mở LOCKED→OPEN nên không tự sửa được,
+        // phải khóa lại chủ động. KHÔNG đụng node COMPLETED để tránh khóa nhầm chặng đã clear.
+        {
+            Set<Integer> stagesClearedOther =
+                    com.fedu.fedu.utils.NodeRoutingUtils.stagesClearedAtOtherLevel(progressList, level);
+            boolean relocked = false;
+            for (StudentNodeProgress p : progressList) {
+                if (p.getStatus() != StudentProgressStatus.OPEN
+                        && p.getStatus() != StudentProgressStatus.IN_PROGRESS) continue;
+                if (com.fedu.fedu.utils.NodeRoutingUtils.alreadyClearedAtOtherLevel(
+                        p.getLearningNode(), stagesClearedOther)) {
+                    p.setStatus(StudentProgressStatus.LOCKED);
+                    p.setUnlockedAt(null);
+                    studentNodeProgressRepository.save(p);
+                    relocked = true;
+                }
+            }
+            if (relocked) {
+                healed = true;
+                progressList = studentNodeProgressRepository
+                        .findByStudentUserIdAndLearningPathPathId(studentId, path.getPathId());
+            }
+        }
+
         // Run fixed-point graph unlocking propagation to unlock all reachable nodes whose prerequisites are completed.
         List<NodeEdge> pathEdges = nodeEdgeRepository.findByFromNodeLearningPathPathId(path.getPathId());
         Map<Long, List<NodeEdge>> incomingByNode = new HashMap<>();
